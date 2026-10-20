@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scrabble - play with a friend</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body data-page="index">
+  <main class="landing">
+    <h1 class="logo" aria-label="Scrabble">
+      <span>S</span><span>C</span><span>R</span><span>A</span><span>B</span><span>B</span><span>L</span><span>E</span>
+    </h1>
+    <p class="tagline">Two players, two browsers, one board.</p>
+
+    {% if error %}
+      <div class="banner banner-error" role="alert">{{ error }}</div>
+    {% endif %}
+
+    <div id="rejoin" class="banner banner-info" hidden>
+      <span>You have a game in progress (room <b id="rejoin-code"></b>).</span>
+      <a id="rejoin-link" class="btn btn-primary" href="#">Rejoin</a>
+      <button id="rejoin-forget" class="btn btn-link" type="button">Forget it</button>
+    </div>
+
+    <section class="card">
+      <h2>New game</h2>
+      <label class="field">
+        <span>Rules</span>
+        <select id="rules">
+          <option value="strict">Strict &ndash; invalid words are rejected automatically</option>
+          <option value="challenge">Challenge &ndash; play anything, your opponent may challenge</option>
+        </select>
+      </label>
+      <button id="create-btn" class="btn btn-primary btn-wide" type="button">Create game</button>
+      <p id="create-error" class="form-error" role="alert" hidden></p>
+      <p class="hint">You'll get a link to send to your opponent.</p>
+    </section>
+
+    <section class="card">
+      <h2>Join a game</h2>
+      <form id="join-form" class="row">
+        <input id="join-code" type="text" inputmode="text" autocomplete="off" autocapitalize="characters"
+               spellcheck="false" maxlength="8" placeholder="8-character room code" aria-label="Room code">
+        <button class="btn btn-primary" type="submit">Join</button>
+      </form>
+      <p id="join-error" class="form-error" role="alert" hidden></p>
+    </section>
+  </main>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scrabble - room {{ code }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body data-page="game" data-room="{{ code }}" data-rules="{{ rules }}">
+  <header class="topbar">
+    <a class="brand" href="/">SCRABBLE</a>
+    <div class="roominfo">
+      Room <code id="room-code">{{ code }}</code>
+      <span class="sep">&middot;</span>
+      <span id="rules-label"></span>
+    </div>
+    <span id="conn" class="conn conn-wait" title="Connection status">connecting&hellip;</span>
+  </header>
+
+  <div id="turn-banner" class="turn-banner" role="status" aria-live="polite">Connecting&hellip;</div>
+  <div id="toast" class="toast" role="alert" hidden></div>
+
+  <main class="layout">
+    <section class="board-col">
+      <div id="board" class="board" role="grid" aria-label="Scrabble board"></div>
+
+      <div id="rack" class="rack" aria-label="Your tile rack"></div>
+      <div id="preview" class="preview" aria-live="polite"></div>
+
+      <div class="controls">
+        <button id="btn-submit" class="btn btn-primary" type="button" disabled>Play word</button>
+        <button id="btn-recall" class="btn" type="button" disabled>Recall tiles</button>
+        <button id="btn-swap" class="btn" type="button" disabled>Swap&hellip;</button>
+        <button id="btn-pass" class="btn" type="button" disabled>Pass</button>
+        <button id="btn-challenge" class="btn btn-danger" type="button" hidden>Challenge</button>
+      </div>
+    </section>
+
+    <aside class="side-col">
+      <div id="players" class="players"></div>
+      <div class="bag">Tiles in bag: <b id="bag-count">&ndash;</b></div>
+
+      <div id="share" class="share" hidden>
+        <p>Waiting for your opponent. Send them this link:</p>
+        <div class="row">
+          <input id="share-url" type="text" readonly aria-label="Shareable link">
+          <button id="share-copy" class="btn" type="button">Copy</button>
+        </div>
+      </div>
+
+      <div class="history-wrap">
+        <h3>Moves</h3>
+        <ol id="history" class="history"></ol>
+      </div>
+    </aside>
+  </main>
+
+  <div id="modal-root"></div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js" crossorigin="anonymous"></script>
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
