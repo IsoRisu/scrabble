@@ -285,6 +285,8 @@ if __name__ == "__main__":
 # --------------------------------------------------------------------------
 # TODO - ideas for future versions (deliberately out of scope for v1)
 # --------------------------------------------------------------------------
+# TODO: Letter league scoring system.
+# TODO: Multiple language support. (Finnish, Spanish, Korean, Swedish, French)
 # TODO: Persist rooms (SQLite/Redis) so games survive restarts and so more than
 #       one gunicorn worker can be used (needs a Socket.IO message queue too).
 # TODO: Accounts / auth instead of anonymous per-room session tokens.
