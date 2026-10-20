@@ -147,7 +147,7 @@
       toast: $('toast'), share: $('share'), shareUrl: $('share-url'), modalRoot: $('modal-root'),
       submit: $('btn-submit'), recall: $('btn-recall'), swap: $('btn-swap'),
       pass: $('btn-pass'), challenge: $('btn-challenge'), modeLabel: $('mode-label'),
-      settings: $('settings'), setMode: $('set-mode'), setLength: $('set-length'), modeHelp: $('mode-help'),
+      settingsBtn: $('btn-settings'), info: $('btn-info'), timer: $('timer'),
     };
     let cells = [];          // cells[row][col] -> element
 
@@ -163,6 +163,14 @@
       },
     };
     const LENGTH_LABEL = { short: 'Short', medium: 'Medium', full: 'Full' };
+    const timerText = (key) => {
+      const secs = config && config.timers ? config.timers[key] : 0;
+      if (!secs) return 'No timer';
+      return secs < 120 ? `${secs} seconds per turn` : `${secs / 60} minutes per turn`;
+    };
+    const timerShort = (key) => (key && key !== 'off' ? ` · ${key} turns` : '');
+    const letterMult = (row, col) => ({ DL: 2, TL: 3 }[config.premiums[`${row},${col}`]] || 1);
+    let deadlineAt = null;   // local time (ms) at which the current turn's clock runs out
     const modeLabel = (mode) => (MODE_INFO[mode] ? MODE_INFO[mode].label : mode);
     const lengthText = (length) => {
       const tiles = config && config.lengths ? config.lengths[length] : null;
@@ -358,14 +366,17 @@
       }
     }
 
-    // `boost` is the permanent letter multiplier a tile earned in Wild mode (1 = none).
-    function makeTile(letter, blank, extra = '', boost = 1) {
+    // `boost` is the letter multiplier shown on the tile: the one a tile on the board
+    // earned (Wild keeps it for good) or the one of the square a tentative tile sits on.
+    // `tint` colours boosted tiles (Wild mode) so everyone can see which were multiplied.
+    function makeTile(letter, blank, extra = '', boost = 1, tint = false) {
       const children = [h('span', { class: 'l', text: letter || '' })];
-      const boosted = !blank && boost > 1;
-      if (!blank) children.push(h('span', { class: 'v', text: String(tileValue(letter) * (boosted ? boost : 1)) }));
-      const cls = `tile${blank ? ' blank' : ''}${boosted ? ` boosted boost-${boost}` : ''}${extra ? ` ${extra}` : ''}`;
+      const mult = !blank && boost > 1 ? boost : 1;
+      if (!blank) children.push(h('span', { class: 'v', text: String(tileValue(letter) * mult) }));
+      const tinted = mult > 1 && tint;
+      const cls = `tile${blank ? ' blank' : ''}${tinted ? ` boosted boost-${mult}` : ''}${extra ? ` ${extra}` : ''}`;
       const tile = h('div', { class: cls }, children);
-      if (boosted) tile.setAttribute('title', `Worth ${tileValue(letter) * boost} (x${boost} letter bonus kept)`);
+      if (tinted) tile.setAttribute('title', `Worth ${tileValue(letter) * mult} (x${mult} letter bonus)`);
       return tile;
     }
 
@@ -381,35 +392,98 @@
       renderPreview();
       renderControls();
       els.bag.textContent = String(S.bag_count);
-      renderSettings();
-      els.modeLabel.textContent = `${modeLabel(S.mode)} · ${lengthText(S.length)}`;
+      renderSettingsButton();
+      renderTimer();
+      els.modeLabel.textContent = `${modeLabel(S.mode)} · ${lengthText(S.length)}${timerShort(S.timer)}`;
       els.share.hidden = S.status !== 'waiting';
       if (S.status === 'waiting') els.shareUrl.value = `${window.location.origin}/join/${roomCode}`;
       document.title = `${myTurn() ? '▶ ' : ''}Scrabble – ${roomCode}`;
       showGameOver();
     }
 
-    function renderSettings() {
-      const open = S.status !== 'finished' && !S.settings_locked;
-      els.settings.hidden = !open;
-      if (!open) return;
-      if (!els.setMode.options.length) {
-        for (const mode of config.modes) els.setMode.append(h('option', { value: mode, text: modeLabel(mode) }));
-        for (const length of Object.keys(config.lengths)) {
-          els.setLength.append(h('option', { value: length, text: lengthText(length) }));
-        }
-      }
-      els.setMode.value = S.mode;
-      els.setLength.value = S.length;
-      els.setMode.disabled = busy;
-      els.setLength.disabled = busy;
-      els.modeHelp.textContent = (MODE_INFO[S.mode] || {}).help || '';
+    function renderSettingsButton() {
+      const locked = S.status === 'finished' || S.settings_locked;
+      els.settingsBtn.disabled = locked;
+      els.settingsBtn.title = locked ? 'Settings can only be changed before the first turn is played' : '';
     }
 
-    function changeSettings(change) {
-      if (!S || S.settings_locked) return;
-      act('update_settings', change, () => toast('Game settings updated.'));
+    function openSettingsModal() {
+      if (!S || S.settings_locked || S.status === 'finished') return;
+      showModal((modal, api) => {
+        const option = (value, text) => h('option', { value, text });
+        const modeSel = h('select', { 'aria-label': 'Scoring' }, config.modes.map((m) => option(m, modeLabel(m))));
+        const lengthSel = h('select', { 'aria-label': 'Length' },
+          Object.keys(config.lengths).map((l) => option(l, lengthText(l))));
+        const timerSel = h('select', { 'aria-label': 'Timer' },
+          Object.keys(config.timers).map((t) => option(t, timerText(t))));
+        modeSel.value = S.mode;
+        lengthSel.value = S.length;
+        timerSel.value = S.timer;
+        const help = h('p', { class: 'hint' });
+        const showHelp = () => { help.textContent = (MODE_INFO[modeSel.value] || {}).help || ''; };
+        modeSel.addEventListener('change', showHelp);
+        showHelp();
+        const field = (label, el) => h('label', { class: 'field' }, h('span', { text: label }), el);
+        const save = () => {
+          const change = {};
+          if (modeSel.value !== S.mode) change.mode = modeSel.value;
+          if (lengthSel.value !== S.length) change.length = lengthSel.value;
+          if (timerSel.value !== S.timer) change.timer = timerSel.value;
+          api.close();
+          if (Object.keys(change).length) act('update_settings', change, () => toast('Game settings updated.'));
+        };
+        modal.append(
+          h('h2', { text: 'Game Settings' }),
+          h('p', { text: 'Either player can change these until the first turn is played.' }),
+          field('Scoring', modeSel), help,
+          field('Length', lengthSel),
+          field('Timer', timerSel),
+          h('div', { class: 'actions' },
+            h('button', { class: 'btn', type: 'button', text: 'Cancel', onclick: () => api.close() }),
+            h('button', { class: 'btn btn-primary', type: 'button', text: 'Save', onclick: save })),
+        );
+      });
     }
+
+    function openInfoModal() {
+      showModal((modal, api) => {
+        const bullet = (strong, text) => h('li', {}, h('b', { text: strong }), text);
+        modal.classList.add('modal-info');
+        modal.append(
+          h('h2', { text: 'Game Info' }),
+          h('p', { text: 'Players take turns placing letters on a shared board to make words, crossword-style. High-value letters and special squares earn more points.' }),
+          h('h3', { text: 'Setup' }),
+          h('p', { text: 'Open Edit Game Settings to choose the length, scoring and timer for your game (before the first turn).' }),
+          h('ul', {},
+            bullet('Wild (default): ', 'when a letter is multiplied, it keeps its improved score. Multiplied letters are coloured in, so they can be reused by anyone later. Wild mode checks words automatically and tells you whether a word is valid as you place tiles.'),
+            bullet('Classic: ', 'each letter has a point value in its lower right. When you play a word, you score all the letters used. Put letters on multiplier squares for higher scores. Classic uses the traditional challenge system.')),
+          h('h3', { text: 'How to play' }),
+          h('ol', {},
+            h('li', { text: 'Place letters: use the tiles near the bottom to make words. Select a tile and then its destination, or drag it there. The number on each tile is what that letter scores on the square it is on.' }),
+            h('li', { text: "Can't form a word? Swap tiles with the Swap button above your letters, or press Pass Turn under the timer." }),
+            h('li', { text: 'Winning: the player with the most points at the end of the game wins.' })),
+          h('div', { class: 'actions' }, h('button', { class: 'btn btn-primary', type: 'button', text: 'Got it', onclick: () => api.close() })),
+        );
+      });
+    }
+
+    function fmtClock(ms) {
+      const total = Math.max(0, Math.ceil(ms / 1000));
+      return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+    }
+
+    function renderTimer() {
+      const box = els.timer;
+      if (!S) return;
+      box.className = 'timer';
+      if (S.status !== 'playing') { box.textContent = S.status === 'finished' ? 'Game over' : ''; return; }
+      if (!S.timer || S.timer === 'off' || deadlineAt === null) { box.textContent = 'No timer'; box.classList.add('off'); return; }
+      const left = deadlineAt - Date.now();
+      box.textContent = `⏱ ${fmtClock(left)}`;
+      if (myTurn()) box.classList.add('mine');
+      if (left <= 10000) box.classList.add('low');
+    }
+    setInterval(renderTimer, 250);
 
     function renderBanner() {
       let text;
@@ -444,10 +518,10 @@
       if (canEdit()) {
         for (const p of local.pending) {
           const isBlank = S.rack[p.rack_index] === '?';
-          mine.set(`${p.row},${p.col}`, { letter: p.letter, blank: isBlank });
+          mine.set(`${p.row},${p.col}`, { letter: p.letter, blank: isBlank, boost: letterMult(p.row, p.col) });
         }
       } else if (isPlaying()) {
-        for (const p of S.pending) theirs.set(`${p.row},${p.col}`, { letter: p.letter, blank: p.blank });
+        for (const p of S.pending) theirs.set(`${p.row},${p.col}`, { letter: p.letter, blank: p.blank, boost: letterMult(p.row, p.col) });
       }
 
       const placing = canEdit() && local.selected !== null;
@@ -466,11 +540,11 @@
           } else if (mine.has(key)) {
             kind = 'pending';
             info = mine.get(key);
-            sig = `p:${info.letter}:${info.blank ? 1 : 0}`;
+            sig = `p:${S.mode}:${info.letter}:${info.blank ? 1 : 0}:${info.boost}`;
           } else if (theirs.has(key)) {
             kind = 'ghost';
             info = theirs.get(key);
-            sig = `g:${info.letter}:${info.blank ? 1 : 0}`;
+            sig = `g:${S.mode}:${info.letter}:${info.blank ? 1 : 0}:${info.boost}`;
           } else {
             sig = 'e';
           }
@@ -479,7 +553,7 @@
           cell.dataset.sig = sig;
           cell.replaceChildren();
           if (info) {
-            const tile = makeTile(info.letter, info.blank, kind, info.boost || 1);
+            const tile = makeTile(info.letter, info.blank, kind, info.boost || 1, S.mode === 'wild');
             if (kind === 'pending') {
               tile.setAttribute('title', 'Drag to move, tap to return to your rack');
             }
@@ -570,7 +644,8 @@
       const parts = [];
       pv.words.forEach((w, i) => {
         if (i) parts.push(' · ');
-        parts.push(h('span', { class: w.valid === false ? 'pv-bad' : '', text: `${w.word} ${w.score}` }));
+        const mark = w.valid === true ? '✓ ' : (w.valid === false ? '✗ ' : '');
+        parts.push(h('span', { class: w.valid === false ? 'pv-bad' : (w.valid === true ? 'pv-good' : ''), text: `${mark}${w.word} ${w.score}` }));
       });
       if (pv.bingo) parts.push(h('span', { class: 'pv-total', text: ` BINGO +${config.bingo_bonus}` }));
       if (pv.total !== null && pv.total !== undefined) parts.push(h('span', { class: 'pv-total', text: ` = ${pv.total}` }));
@@ -587,7 +662,7 @@
       els.swap.disabled = !(edit && S.bag_count >= config.rack_size && !busy);
       els.swap.title = S.bag_count < config.rack_size ? 'Fewer than 7 tiles left in the bag' : '';
       els.pass.disabled = !(myTurn() && !busy);
-      els.pass.textContent = S.awaiting_final ? 'Accept & end game' : 'Pass';
+      els.pass.textContent = S.awaiting_final ? 'Accept & end game' : 'Pass Turn';
       els.challenge.hidden = S.mode !== 'classic';
       els.challenge.disabled = !(S.can_challenge && !busy);
     }
@@ -617,6 +692,7 @@
       local.inflight = 0;
       local.selected = null;
       local.pending = serverPending();
+      deadlineAt = S.turn_ms_left === null || S.turn_ms_left === undefined ? null : Date.now() + S.turn_ms_left;
       render();
     }
 
@@ -631,6 +707,9 @@
         }
       }
       version = msg.version;
+      if ('turn_ms_left' in msg.patch) {
+        deadlineAt = S.turn_ms_left === null ? null : Date.now() + S.turn_ms_left;
+      }
       syncLocalFromServer();
       render();
     }
@@ -658,7 +737,7 @@
       });
     }
 
-    function renderControlsSafe() { if (S && config) { renderControls(); renderSettings(); } }
+    function renderControlsSafe() { if (S && config) { renderControls(); renderSettingsButton(); } }
 
     function sendPlacements() {
       if (!socket || !socket.connected) { toast('Not connected to the server.', true); return; }
@@ -800,7 +879,14 @@
       if (!press.dragging && Math.hypot(event.clientX - press.startX, event.clientY - press.startY) > 6) {
         press.dragging = true;
         press.ghost = press.el.cloneNode(true);
-        press.ghost.classList.remove('selected', 'pending', 'ghost', 'last');
+        press.ghost.classList.remove('selected', 'pending', 'ghost', 'last', 'boosted', 'boost-2', 'boost-3');
+        const src = press.source;
+        const entry = src.type === 'board' ? local.pending.find((q) => q.row === src.row && q.col === src.col) : null;
+        const letter = src.type === 'rack' ? S.rack[src.index] : (entry ? entry.letter : '');
+        const isBlank = src.type === 'rack' ? letter === '?' : !!entry && S.rack[entry.rack_index] === '?';
+        press.baseValue = isBlank ? 0 : tileValue(letter);
+        press.valueEl = press.ghost.querySelector('.v');
+        if (press.valueEl) press.valueEl.textContent = String(press.baseValue);
         press.ghost.classList.add('drag-ghost');
         document.body.append(press.ghost);
         press.el.classList.add('dragging');
@@ -810,6 +896,10 @@
         press.ghost.style.top = `${event.clientY}px`;
         const target = targetAt(event.clientX, event.clientY);
         setHighlight(dropIsValid(press.source, target) ? target.el : null);
+        if (press.valueEl) {
+          const mult = target && target.type === 'cell' ? letterMult(target.row, target.col) : 1;
+          press.valueEl.textContent = String(press.baseValue * mult);
+        }
       }
     }
 
@@ -897,8 +987,8 @@
 
     els.swap.addEventListener('click', openSwapModal);
 
-    els.setMode.addEventListener('change', () => changeSettings({ mode: els.setMode.value }));
-    els.setLength.addEventListener('change', () => changeSettings({ length: els.setLength.value }));
+    els.settingsBtn.addEventListener('click', openSettingsModal);
+    els.info.addEventListener('click', openInfoModal);
 
     els.pass.addEventListener('click', () => {
       if (!myTurn()) return;
@@ -930,7 +1020,7 @@
     els.shareUrl.addEventListener('focus', () => els.shareUrl.select());
 
     // ---------- boot ----------
-    els.modeLabel.textContent = `${modeLabel(document.body.dataset.mode)} · ${LENGTH_LABEL[document.body.dataset.length] || ''}`;
+    els.modeLabel.textContent = `${modeLabel(document.body.dataset.mode)} · ${LENGTH_LABEL[document.body.dataset.length] || ''}${timerShort(document.body.dataset.timer)}`;
     if (session.token) {
       startSocket(); // saved session token -> rejoin automatically
     } else {

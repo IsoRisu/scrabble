@@ -713,6 +713,101 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(CONFIG["lengths"], {"short": 50, "medium": 75, "full": 100})
 
 
+class FakeClock:
+    def __init__(self):
+        self.t = 1000.0
+
+    def __call__(self):
+        return self.t
+
+
+def timed_room(timer="30s", mode="wild"):
+    set_words(WORDS)
+    clock = FakeClock()
+    room = Room("TESTROOM", mode=mode, timer=timer, rng=random.Random(1), clock=clock)
+    a, b = room.add_player("Alice"), room.add_player("Bob")
+    room.start()
+    return room, a, b, clock
+
+
+class TimerTests(unittest.TestCase):
+    def test_default_is_no_timer(self):
+        room, a, b = make_room()
+        self.assertEqual(room.timer, "off")
+        self.assertIsNone(room.view_for(a)["turn_ms_left"])
+        self.assertFalse(room.expire_turn())
+
+    def test_clock_counts_down_in_the_view(self):
+        room, a, b, clock = timed_room("30s")
+        self.assertEqual(room.view_for(a)["turn_ms_left"], 30000)
+        clock.t += 10
+        self.assertEqual(room.view_for(b)["turn_ms_left"], 20000)
+        self.assertEqual(room.view_for(a)["timer"], "30s")
+
+    def test_expiry_passes_the_turn(self):
+        room, a, b, clock = timed_room("30s")
+        first = room.current
+        clock.t += 29
+        self.assertFalse(room.expire_turn())
+        clock.t += 2
+        self.assertTrue(room.expire_turn())
+        self.assertEqual(room.current, 1 - first)
+        self.assertEqual(room.scoreless_turns, 1)
+        self.assertIn("ran out of time", " ".join(h["text"] for h in room.history))
+        self.assertEqual(room.view_for(a)["turn_ms_left"], 30000)  # fresh clock for the next player
+
+    def test_clock_restarts_after_a_move(self):
+        room, a, b, clock = timed_room("60s")
+        mover = room.players[room.current]
+        give(mover, list("CATQQQQ"))
+        clock.t += 40
+        move(room, mover, "CAT", 7, 6)
+        room.touch()
+        self.assertEqual(room.view_for(mover)["turn_ms_left"], 60000)
+        self.assertFalse(room.expire_turn())
+
+    def test_repeated_timeouts_end_the_game(self):
+        room, a, b, clock = timed_room("30s")
+        for _ in range(6):
+            clock.t += 31
+            room.expire_turn()
+        self.assertEqual(room.status, "finished")
+        self.assertIsNone(room.view_for(a)["turn_ms_left"])
+
+    def test_timeout_on_final_play_accepts_it_in_classic(self):
+        room, a, b, clock = timed_room("30s", mode="classic")
+        mover = room.players[room.current]
+        opp = room.players[1 - room.current]
+        room.bag.clear()
+        give(mover, list("CAT"))
+        move(room, mover, "CAT", 7, 6)
+        room.touch()  # what the server does after every action
+        self.assertTrue(room.awaiting_final)
+        clock.t += 31
+        self.assertTrue(room.expire_turn())
+        self.assertEqual(room.status, "finished")
+
+    def test_timer_setting_can_be_changed_before_the_first_turn(self):
+        room, a, b, clock = timed_room("off")
+        room.update_settings(a, timer="60s")
+        self.assertEqual(room.view_for(a)["turn_ms_left"], 60000)
+        room.update_settings(a, timer="off")
+        self.assertIsNone(room.view_for(a)["turn_ms_left"])
+        with self.assertRaises(GameError):
+            room.update_settings(a, timer="forever")
+
+    def test_unknown_timer_rejected_and_config_lists_timers(self):
+        with self.assertRaises(GameError):
+            Room("X", timer="forever")
+        self.assertEqual(CONFIG["timers"]["off"], 0)
+        self.assertEqual(CONFIG["timers"]["5m"], 300)
+
+    def test_registry_lists_rooms(self):
+        registry = RoomRegistry()
+        room = registry.create()
+        self.assertEqual(registry.rooms(), [room])
+
+
 class DiffTests(unittest.TestCase):
     def test_diff_only_contains_changes(self):
         room, a, b = make_room()

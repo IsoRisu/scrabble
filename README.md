@@ -17,11 +17,26 @@ on the server (the single source of truth), vanilla JS/HTML/CSS on the client
 - Play / Recall / Swap / Pass buttons, live scores, turn banner, move history.
 - Reconnect: the session token is kept in `localStorage`; reloading the page or
   dropping the connection puts you back in your seat.
-- Two rule sets, chosen when the game is created:
-  - **strict** - invalid words are rejected automatically.
-  - **challenge** - any geometrically legal play is accepted; the opponent may
-    `challenge_skip` it. A successful challenge removes the play; a failed one
-    costs the challenger their turn.
+- Game settings, changeable by **either player inside the room until the first turn is played**
+  (rooms are created with the defaults, **Wild** and **Full**):
+  - **Mode**
+    - **Wild** (default) - every word is checked against the dictionary automatically
+      (the live preview shows validity and invalid plays are rejected). A tile placed on a
+      double or triple letter square **keeps its multiplier for the rest of the game**, so
+      later words that reuse it score the improved value. Boosted tiles are shown with
+      their multiplied value on the board.
+    - **Classic** - traditional scoring (premium squares only count on the turn the tile is
+      placed). Any geometrically legal play is accepted and the opponent may `challenge_skip`
+      it. A successful challenge removes the play; a failed one costs the challenger their turn.
+  - **Length** - how many tiles are in the bag: Short (50), Medium (75) or Full (100).
+  - **Timer** - off (default) or 30s / 60s / 90s / 2m / 3m / 5m per turn. The server owns the
+    clock: when it runs out the player's turn is passed automatically (in Classic, running out of
+    time on a final play accepts it). The clock restarts every turn.
+- **Edit Game Settings** button (side panel) opens the settings dialog; the **i** button in the top
+  bar opens Game Info with the rules. Swap sits above the rack; Pass Turn sits under the timer.
+- The number on each tile is what it scores on the square it is on, so a tentative tile on a
+  double/triple letter square shows its multiplied value (also while dragging). In Wild, the live
+  preview marks every word with a tick or cross, and multiplied tiles are coloured in on the board.
 
 ## Project layout
 
@@ -30,8 +45,8 @@ app.py              Flask routes + Socket.IO events
 game/
   tiles.py          tile distribution and letter values
   board.py          board state, placement legality, word extraction
-  scoring.py        premium squares, word/move scoring, bingo
-  room.py           Room (rules, turns, views), RoomRegistry, dictionary loading
+  scoring.py        premium squares, word/move scoring, Wild letter boosts, bingo
+  room.py           Room (mode, length, turns, views), RoomRegistry, dictionary loading
 static/             app.js, style.css
 templates/          index.html (home), game.html (board)
 tests/              unit tests for the rules engine
@@ -52,8 +67,8 @@ pip install -r requirements.txt
 python app.py
 ```
 
-Open http://127.0.0.1:5000, click **Create game**, and send the link to your
-opponent (or open it in a second browser window to play both sides).
+Open http://127.0.0.1:5000, click **Create game**, optionally pick the mode and
+length in the room, and send the link to your opponent (or open it in a second browser window to play both sides).
 Set `PORT` / `HOST` to change the address (`HOST=0.0.0.0` to play on your LAN).
 
 Run the tests:
@@ -70,11 +85,17 @@ internet access (see TODO).
 | Event | Payload | Notes |
 |---|---|---|
 | `join` | `{room, token?, name?}` | Acks `{ok, token, seat}`. A valid `token` rejoins your seat. |
+| `update_settings` | `{mode?, length?, timer?}` | `mode`: `wild` or `classic`; `length`: `short`, `medium` or `full`; `timer`: `off`, `30s`, `60s`, `90s`, `2m`, `3m` or `5m`. Either player, before the first turn only. Changing the length re-deals the racks. |
 | `place_tiles` | `{placements: [{rack_index, row, col, letter?}]}` | Replaces your tentative placement; `letter` is required for blanks. |
 | `submit_word` | `{}` | Validates, scores, draws tiles, passes the turn. |
-| `pass` | `{}` | Pass (or accept a final play in challenge rules). |
+| `pass` | `{}` | Pass (or accept a final play in Classic mode). |
 | `swap_tiles` | `{indices: [...]}` | Needs at least 7 tiles in the bag. |
-| `challenge_skip` | `{}` | Challenge rules only. |
+| `challenge_skip` | `{}` | Classic mode only. |
+
+HTTP: `POST /create` takes no body and returns `{code, path, url, mode, length, timer}`;
+`GET /api/room/<code>` returns `{exists, status, players, mode, length}`. Board cells in
+the state view are `{l: letter, b: is_blank, m: letter_boost}`, and the view carries
+`mode`, `length`, `timer`, `turn_ms_left`, `rules` (`strict` for Wild, `challenge` for Classic) and `settings_locked`.
 
 Server to client: `state` (full snapshot `{version, config, state}`) and
 `state_diff` (`{base, version, patch}`). If a client sees a diff whose `base` is
@@ -135,7 +156,7 @@ text file; non-alphabetic lines are ignored).
 - [ ] AI opponent.
 - [ ] 3-4 player rooms.
 - [ ] Full official dictionary, selectable per room.
-- [ ] Turn timers and automatic forfeits.
+- [ ] Automatic forfeits for abandoned games.
 - [ ] Rematch, spectators, GCG move-log export.
 - [ ] Rate limiting for socket events and room creation.
 - [ ] Self-host the socket.io client; add Playwright and Socket.IO integration tests.

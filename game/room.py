@@ -23,6 +23,10 @@ mode  (scoring and word checking)
            the challenger loses their own turn.
 
 length  (tiles in the bag): short, medium or full.
+
+timer   (per-turn clock): off, or 30s / 60s / 90s / 2m / 3m / 5m for each turn.
+        When a player's clock runs out the server passes for them
+        (``Room.expire_turn``). The clock restarts on every turn.
 """
 import os
 import random
@@ -52,6 +56,9 @@ MODE_RULES = {"wild": "strict", "classic": "challenge"}
 LENGTHS = {"short": 50, "medium": 75, "full": 100}
 DEFAULT_LENGTH = "full"
 RULES = tuple(MODE_RULES.values())
+# Per-turn timer options: key -> seconds (0 = no timer).
+TIMERS = {"off": 0, "30s": 30, "60s": 60, "90s": 90, "2m": 120, "3m": 180, "5m": 300}
+DEFAULT_TIMER = "off"
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -67,6 +74,8 @@ CONFIG = {
     "default_mode": DEFAULT_MODE,
     "lengths": dict(LENGTHS),
     "default_length": DEFAULT_LENGTH,
+    "timers": dict(TIMERS),
+    "default_timer": DEFAULT_TIMER,
 }
 
 
@@ -157,14 +166,20 @@ class Player:
 # Room
 # --------------------------------------------------------------------------
 class Room:
-    def __init__(self, code, mode=DEFAULT_MODE, length=DEFAULT_LENGTH, rng=None):
+    def __init__(self, code, mode=DEFAULT_MODE, length=DEFAULT_LENGTH, timer=DEFAULT_TIMER, rng=None, clock=None):
         if mode not in MODES:
             raise GameError("Unknown game type.")
         if length not in LENGTHS:
             raise GameError("Unknown game length.")
+        if timer not in TIMERS:
+            raise GameError("Unknown timer setting.")
         self.code = code
         self.mode = mode
         self.length = length
+        self.timer = timer
+        self.clock = clock or time.time  # injectable so tests can move time
+        self.turn_deadline = None  # clock() value at which the current turn expires
+        self._clock_sig = None
         self.turns_played = 0  # plays, passes, swaps and challenges so far
         self.rng = rng or random.Random()
         self.created = self.last_active = time.time()
@@ -194,29 +209,33 @@ class Room:
         return self.turns_played > 0 or self.status == "finished"
 
     # ---- settings ----------------------------------------------------
-    def update_settings(self, player, mode=None, length=None):
-        """Change the game type and/or length. Only possible before the first turn."""
+    def update_settings(self, player, mode=None, length=None, timer=None):
+        """Change game type, length and/or timer. Only possible before the first turn."""
         if self.settings_locked:
             raise GameError("Settings can only be changed before the first turn is played.")
         if mode is not None and mode not in MODES:
             raise GameError("Unknown game type.")
         if length is not None and length not in LENGTHS:
             raise GameError("Unknown game length.")
+        if timer is not None and timer not in TIMERS:
+            raise GameError("Unknown timer setting.")
         mode = mode or self.mode
         length = length or self.length
-        if mode == self.mode and length == self.length:
+        timer = timer or self.timer
+        if (mode, length, timer) == (self.mode, self.length, self.timer):
             return
         length_changed = length != self.length
-        self.mode, self.length = mode, length
+        self.mode, self.length, self.timer = mode, length, timer
         if length_changed and self.status == "playing":
             self._deal()  # nobody has moved yet, so a fresh deal is fair
         for p in self.players:
             p.preview = self._preview(p)  # validity display depends on the mode
         label = {"wild": "Wild", "classic": "Classic"}[mode]
+        clock = "no timer" if not TIMERS[timer] else f"{TIMERS[timer]}s per turn"
         self._log(
             "system",
             f"{player.name} set the game to {label} scoring, {length} length "
-            f"({LENGTHS[length]} tiles).",
+            f"({LENGTHS[length]} tiles), {clock}.",
         )
 
     # ---- players -----------------------------------------------------
@@ -244,6 +263,7 @@ class Room:
         """Record a change: bumps the version and the activity clock."""
         self.version += 1
         self.last_active = time.time()
+        self._sync_clock()  # a new turn gets a fresh clock the moment the action lands
 
     def connected_count(self):
         return sum(1 for p in self.players if p.connected)
@@ -253,6 +273,7 @@ class Room:
         self._deal()
         self.current = self.rng.randrange(len(self.players))
         self.status = "playing"
+        self._sync_clock()
         self._log("system", f"Game started - {self.players[self.current].name} goes first.")
 
     def _deal(self):
@@ -261,6 +282,33 @@ class Room:
         for player in self.players:
             self._clear_pending(player)
             player.rack = self._draw(RACK_SIZE)
+
+    # ---- turn clock --------------------------------------------------
+    def _sync_clock(self):
+        """(Re)start the turn clock whenever the turn, status or timer changed."""
+        sig = (self.status, self.current, self.turns_played, self.awaiting_final, self.timer)
+        if sig == self._clock_sig:
+            return
+        self._clock_sig = sig
+        seconds = TIMERS[self.timer]
+        if self.status == "playing" and seconds:
+            self.turn_deadline = self.clock() + seconds
+        else:
+            self.turn_deadline = None
+
+    def expire_turn(self):
+        """Pass for the player on turn if their clock has run out. True if something happened."""
+        with self.lock:
+            self._sync_clock()
+            if self.status != "playing" or self.turn_deadline is None:
+                return False
+            if self.clock() < self.turn_deadline:
+                return False
+            player = self.players[self.current]
+            self._log("system", f"{player.name} ran out of time.")
+            self.pass_turn(player)  # also accepts a final play while one awaits a challenge
+            self._sync_clock()
+            return True
 
     # ---- internal helpers --------------------------------------------
     def _draw(self, count):
@@ -564,8 +612,12 @@ class Room:
     # ---- views -------------------------------------------------------
     def view_for(self, player):
         """Everything `player` is allowed to see, as plain JSON-able data."""
+        self._sync_clock()
         playing = self.status == "playing"
         mover = self.players[self.current] if playing else None
+        ms_left = None
+        if playing and self.turn_deadline is not None:
+            ms_left = max(0, int((self.turn_deadline - self.clock()) * 1000))
 
         pending = []
         if mover is not None:
@@ -596,6 +648,8 @@ class Room:
             "rules": self.rules,
             "mode": self.mode,
             "length": self.length,
+            "timer": self.timer,
+            "turn_ms_left": ms_left,
             "settings_locked": self.settings_locked,
             "status": self.status,
             "you": player.seat,
@@ -661,6 +715,11 @@ class RoomRegistry:
             room = Room(code)
             self._rooms[code] = room
             return room
+
+    def rooms(self):
+        """Snapshot of all live rooms (used by the turn-clock loop)."""
+        with self._lock:
+            return list(self._rooms.values())
 
     def get(self, code):
         return self._rooms.get(self.normalize(code))

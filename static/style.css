@@ -190,9 +190,11 @@ input[type="text"], select {
 .tile.pending { outline: 2px solid var(--gold); outline-offset: -1px; cursor: grab; touch-action: none; }
 .tile.ghost { opacity: .75; outline: 2px dashed #b58a00; outline-offset: -1px; }
 
-/* Wild mode: a tile that landed on a letter premium keeps its multiplied value. */
-.tile.boosted .v { color: #fff; background: var(--sq-dl); border-radius: 3px; padding: 0 2px; right: 5%; bottom: 3%; }
-.tile.boosted.boost-3 .v { background: var(--sq-tl); }
+/* Wild mode: letters that were multiplied are coloured in and keep their improved value. */
+.tile.boosted.boost-2 { background: linear-gradient(#b9e0f5, var(--sq-dl)); }
+.tile.boosted.boost-3 { background: linear-gradient(#4b97cb, var(--sq-tl)); color: #fff; }
+.tile.boosted.boost-3 .v { color: #fff; }
+.tile.boosted .v { font-weight: 800; }
 
 /* ---------- rack ---------- */
 .rack {
@@ -255,11 +257,25 @@ input[type="text"], select {
 .history li.s0 { border-left: 3px solid #2a78b0; padding-left: 7px; }
 .history li.s1 { border-left: 3px solid #c4392d; padding-left: 7px; }
 
-/* ---------- game settings ---------- */
-.settings-card { background: var(--panel); border-radius: var(--radius); padding: 12px; }
-.settings-card h3 { margin: 0 0 8px; font-size: 14px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
-.settings-card .field { margin-bottom: 8px; }
-.settings-card .hint { margin: 6px 0 0; }
+/* ---------- turn panel, swap row, info button ---------- */
+.swap-row { display: flex; justify-content: center; margin-top: 14px; }
+.swap-row + .rack { margin-top: 8px; }
+.turn-panel { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: 12px; }
+.timer {
+  min-width: 120px; text-align: center; padding: 6px 14px; border-radius: 99px;
+  background: rgba(0, 0, 0, .3); color: #fff; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: .04em;
+}
+.timer.off { font-weight: 600; opacity: .7; letter-spacing: 0; }
+.timer.mine { background: var(--accent); }
+.timer.low { background: var(--danger); animation: pulse 1s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .7; } }
+.icon-btn {
+  width: 28px; height: 28px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, .7);
+  background: transparent; color: #fff; font: italic 700 15px Georgia, serif; cursor: pointer; padding: 0;
+}
+.icon-btn:hover { background: rgba(255, 255, 255, .15); }
+.icon-btn:focus-visible { outline: 3px solid var(--gold); outline-offset: 1px; }
+.preview .pv-good { color: #9be7b6; font-weight: 700; }
 
 /* ---------- modals ---------- */
 .modal-backdrop {
@@ -284,6 +300,11 @@ input[type="text"], select {
 .results td:last-child { text-align: right; font-weight: 800; }
 .results .winner td { color: var(--accent-dark); }
 .results small { color: var(--muted); }
+.modal-info { max-height: 90vh; overflow-y: auto; }
+.modal-info h3 { margin: 14px 0 4px; font-size: 15px; }
+.modal-info ul, .modal-info ol { margin: 6px 0; padding-left: 20px; color: var(--ink); }
+.modal-info li { margin: 5px 0; }
+.modal .field select { width: 100%; }
 
 @media (max-width: 520px) {
   .topbar { flex-wrap: wrap; gap: 6px 12px; }

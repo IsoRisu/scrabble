@@ -1,7 +1,7 @@
 """Flask + Flask-SocketIO entry point for the multiplayer Scrabble game.
 
 The server is the single source of truth: clients only send *intents*
-(place tiles, submit, pass, ...) and the server answers with per-player state
+(place tiles, submit, pass, change settings, ...) and the server answers with per-player state
 views (a full snapshot on join, then diffs on every mutation).
 
 Run locally:   python app.py
@@ -28,7 +28,7 @@ from flask_socketio import SocketIO, join_room
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from game.board import GameError
-from game.room import CONFIG, RoomRegistry, clean_name, diff_views
+from game.room import CONFIG, RoomRegistry, diff_views
 
 log = logging.getLogger("scrabble")
 
@@ -76,9 +76,9 @@ def index():
 def create_room():
     """Create a room and return its 8-character code and shareable URL.
 
-    The game type (Wild by default) and length are not chosen here; players
-    pick them inside the room until the first turn has been played
-    (socket event "update_settings").
+    Rooms start with the default settings (Wild mode, full length). Either
+    player changes them inside the room until the first turn is played, so no
+    request body is needed.
     """
     try:
         room = REGISTRY.create()
@@ -92,7 +92,7 @@ def create_room():
             url=request.host_url.rstrip("/") + path,
             mode=room.mode,
             length=room.length,
-            rules=room.rules,
+            timer=room.timer,
         ),
         201,
     )
@@ -104,9 +104,7 @@ def join_page(code):
     if room is None:
         message = "That room was not found. It may have expired - ask for a new link or create a game."
         return render_template("index.html", error=message), 404
-    return render_template(
-        "game.html", code=room.code, rules=room.rules, mode=room.mode, length=room.length
-    )
+    return render_template("game.html", code=room.code, mode=room.mode, length=room.length, timer=room.timer)
 
 
 @app.get("/api/room/<code>")
@@ -116,12 +114,8 @@ def room_info(code):
     if room is None:
         return jsonify(exists=False)
     return jsonify(
-        exists=True,
-        status=room.status,
-        players=len(room.players),
-        mode=room.mode,
-        length=room.length,
-        rules=room.rules,
+        exists=True, status=room.status, players=len(room.players),
+        mode=room.mode, length=room.length, timer=room.timer,
     )
 
 
@@ -165,11 +159,39 @@ def push_all(room):
 
 
 # --------------------------------------------------------------------------
+# Turn clock
+# --------------------------------------------------------------------------
+_clock_started = False
+
+
+def _clock_loop():
+    """Once a second, pass for any player whose turn timer has run out."""
+    while True:
+        socketio.sleep(1)
+        for room in REGISTRY.rooms():
+            try:
+                with room.lock:
+                    if room.expire_turn():
+                        room.touch()
+                        push_all(room)
+            except Exception:
+                log.exception("Turn clock failed for room %s", room.code)
+
+
+def ensure_clock():
+    global _clock_started
+    if not _clock_started:
+        _clock_started = True
+        socketio.start_background_task(_clock_loop)
+
+
+# --------------------------------------------------------------------------
 # Socket events
 # --------------------------------------------------------------------------
 @socketio.on("join")
 def on_join(data=None):
     """Join a room, or rejoin it with a saved session token after a reconnect."""
+    ensure_clock()
     data = data if isinstance(data, dict) else {}
     room = REGISTRY.get(data.get("room"))
     if room is None:
@@ -251,19 +273,20 @@ def game_action(event):
     return decorator
 
 
+@game_action("update_settings")
+def on_update_settings(room, player, data):
+    """Change game settings: {"mode": "wild"|"classic", "length": "short"|"medium"|"full", "timer": "off"|"30s"|...}.
+
+    Either player may do this, but only before the first turn has been played.
+    """
+    room.update_settings(player, mode=data.get("mode"), length=data.get("length"), timer=data.get("timer"))
+    return {"mode": room.mode, "length": room.length, "timer": room.timer}
+
+
 @game_action("place_tiles")
 def on_place_tiles(room, player, data):
     """Replace the player's tentative placement: {"placements": [{rack_index, row, col, letter?}]}."""
     room.place_tiles(player, data.get("placements"))
-
-
-@game_action("update_settings")
-def on_update_settings(room, player, data):
-    """Change the game type and/or length: {"mode": "wild"|"classic", "length": "short"|"medium"|"full"}.
-
-    Either player may do this until the first turn has been played.
-    """
-    room.update_settings(player, data.get("mode"), data.get("length"))
 
 
 @game_action("submit_word")
@@ -285,7 +308,7 @@ def on_swap_tiles(room, player, data):
 
 @game_action("challenge_skip")
 def on_challenge_skip(room, player, data):
-    """Challenge the opponent's last play (challenge rules only).
+    """Challenge the opponent's last play (Classic mode only).
 
     A failed challenge costs the challenger their turn - hence "skip".
     """
@@ -313,7 +336,7 @@ if __name__ == "__main__":
 # TODO: 3-4 player rooms (turn order, per-player challenges, end-game scoring).
 # TODO: Swap in the full official dictionary (TWL/NWL or SOWPODS/Collins) and
 #       let the room creator choose it.
-# TODO: Turn timers / clocks and automatic forfeits for abandoned games.
+# TODO: Automatic forfeits for abandoned games (turn timers already pass for you).
 # TODO: Rematch button, spectators, and a downloadable move log (GCG format).
 # TODO: Rate-limit socket events and room creation per IP.
 # TODO: Serve socket.io-client from /static instead of the CDN for offline use.
