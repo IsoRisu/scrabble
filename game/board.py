@@ -45,45 +45,69 @@ class Word:
 
 class Board:
     def __init__(self):
-        self.grid = [[None] * BOARD_SIZE for _ in range(BOARD_SIZE)]
-        self.tile_count = 0
+        # Sparse grid: (row, col) -> Tile.  Coordinates never shift; the
+        # playable area is the rectangle below, which may grow past 0..14
+        # (negative coordinates are valid) when auto-expansion is on.
+        self.grid = {}
+        self.top, self.left = 0, 0
+        self.bottom, self.right = BOARD_SIZE - 1, BOARD_SIZE - 1
+
+    @property
+    def tile_count(self):
+        return len(self.grid)
 
     # ---- basic access ------------------------------------------------
-    @staticmethod
-    def in_bounds(row, col):
-        return 0 <= row < BOARD_SIZE and 0 <= col < BOARD_SIZE
+    def in_bounds(self, row, col):
+        return self.top <= row <= self.bottom and self.left <= col <= self.right
+
+    def bounds(self):
+        return {"top": self.top, "bottom": self.bottom, "left": self.left, "right": self.right}
 
     def get(self, row, col):
-        if not self.in_bounds(row, col):
-            return None
-        return self.grid[row][col]
+        return self.grid.get((row, col))
 
     def is_empty(self):
-        return self.tile_count == 0
+        return not self.grid
+
+    def expand_to_margin(self, margin):
+        """Make sure at least `margin` empty rings surround every placed tile.
+
+        A side only grows when a tile is within `margin` rings of it, and it
+        grows exactly far enough to restore the margin.  The board never
+        shrinks.  Returns True if any side grew.
+        """
+        if not self.grid:
+            return False
+        rows = [r for r, _ in self.grid]
+        cols = [c for _, c in self.grid]
+        new = (
+            min(self.top, min(rows) - margin),
+            min(self.left, min(cols) - margin),
+            max(self.bottom, max(rows) + margin),
+            max(self.right, max(cols) + margin),
+        )
+        changed = new != (self.top, self.left, self.bottom, self.right)
+        self.top, self.left, self.bottom, self.right = new
+        return changed
 
     def place_all(self, placements, boosts=None):
         """Put tiles on the board. `boosts` maps (row, col) -> permanent letter multiplier."""
         boosts = boosts or {}
         for p in placements:
-            if self.grid[p.row][p.col] is not None:
+            if (p.row, p.col) in self.grid:
                 raise GameError("That square is already taken.")
-            self.grid[p.row][p.col] = Tile(p.letter, p.blank, boosts.get((p.row, p.col), 1))
-            self.tile_count += 1
+            self.grid[(p.row, p.col)] = Tile(p.letter, p.blank, boosts.get((p.row, p.col), 1))
 
     def remove_all(self, placements):
         """Take tiles back off the board (used when a challenge succeeds)."""
         for p in placements:
-            if self.grid[p.row][p.col] is not None:
-                self.grid[p.row][p.col] = None
-                self.tile_count -= 1
+            self.grid.pop((p.row, p.col), None)
 
     def to_dict(self):
         """JSON-friendly snapshot: {"row,col": {"l": letter, "b": is_blank, "m": boost}}."""
         return {
             f"{r},{c}": {"l": tile.letter, "b": tile.blank, "m": tile.boost}
-            for r, row in enumerate(self.grid)
-            for c, tile in enumerate(row)
-            if tile is not None
+            for (r, c), tile in self.grid.items()
         }
 
     # ---- move analysis -----------------------------------------------
@@ -111,7 +135,7 @@ class Board:
                 raise GameError("A tile is off the board.")
             if (p.row, p.col) in new:
                 raise GameError("Two tiles cannot share a square.")
-            if self.grid[p.row][p.col] is not None:
+            if (p.row, p.col) in self.grid:
                 raise GameError("That square is already taken.")
             new[(p.row, p.col)] = Tile(p.letter, p.blank)
 

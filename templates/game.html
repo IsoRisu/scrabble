@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Scrabble - room {{ code }}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
@@ -23,10 +23,13 @@
 
   <main class="layout">
     <section class="board-col">
-      <div id="board" class="board" role="grid" aria-label="Scrabble board"></div>
+      <div id="board-scroll" class="board-scroll">
+        <div id="board" class="board" role="grid" aria-label="Scrabble board"></div>
+      </div>
 
       <div class="swap-row">
         <button id="btn-swap" class="btn" type="button" disabled>Swap&hellip;</button>
+        <button id="btn-zoom" class="btn zoom-btn" type="button" aria-pressed="false">Zoom board</button>
       </div>
       <div id="rack" class="rack" aria-label="Your tile rack"></div>
       <div id="preview" class="preview" aria-live="polite"></div>

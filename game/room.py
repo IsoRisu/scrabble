@@ -22,11 +22,26 @@ mode  (scoring and word checking)
            taken back and the player loses their turn; if all words are valid
            the challenger loses their own turn.
 
+players (2-4): the game starts when that many have joined, or earlier when
+        the host (first player) calls ``Room.start_now`` with at least two in.
+        Only wild supports more than two; classic is two-player. Changeable
+        until the game starts.
+
 length  (tiles in the bag): short, medium or full.
 
 timer   (per-turn clock): off, or 30s / 60s / 90s / 2m / 3m / 5m for each turn.
         When a player's clock runs out the server passes for them
         (``Room.expire_turn``). The clock restarts on every turn.
+
+Staging (prep during the opponent's turn)
+-----------------------------------------
+A player who is *not* on turn can stage a word (``Room.stage_tiles``). It is
+checked and scored live against the board as it is right now, and it is private:
+nobody else ever sees it. Every time the room changes, staged tiles whose
+squares were taken are dropped and the preview is recomputed. When the turn
+reaches the player, the surviving staged tiles become their tentative
+placement (``Player.pending``) with a fresh preview, ready for one click on
+"Play word"; nothing is submitted automatically.
 """
 import os
 import random
@@ -41,7 +56,9 @@ from .tiles import BLANK, RACK_SIZE, TILE_VALUES, new_bag, tile_value
 
 ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no 0/O/1/I
 ROOM_CODE_LENGTH = 8
-MAX_PLAYERS = 2
+MIN_PLAYERS = 2
+MAX_PLAYERS = 4  # wild games; classic (challenge) rules stay strictly two-player
+DEFAULT_PLAYERS = 2
 MAX_NAME_LENGTH = 20
 HISTORY_LIMIT = 60
 SCORELESS_TURN_LIMIT = 6  # consecutive passes/swaps/failed challenges that end the game
@@ -59,6 +76,11 @@ RULES = tuple(MODE_RULES.values())
 # Per-turn timer options: key -> seconds (0 = no timer).
 TIMERS = {"off": 0, "30s": 30, "60s": 60, "90s": 90, "2m": 120, "3m": 180, "5m": 300}
 DEFAULT_TIMER = "off"
+# Auto board expansion: when a tile lands within `expand_margin` rings of the
+# edge the board grows so that many empty rings surround all tiles.  The toggle
+# defaults to on in wild, off in classic, unless a player sets it explicitly.
+DEFAULT_EXPAND_MARGIN = 5
+MIN_EXPAND_MARGIN, MAX_EXPAND_MARGIN = 1, 10
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -76,6 +98,10 @@ CONFIG = {
     "default_length": DEFAULT_LENGTH,
     "timers": dict(TIMERS),
     "default_timer": DEFAULT_TIMER,
+    "default_expand_margin": DEFAULT_EXPAND_MARGIN,
+    "expand_margin_range": [MIN_EXPAND_MARGIN, MAX_EXPAND_MARGIN],
+    "default_players": DEFAULT_PLAYERS,
+    "player_range": [MIN_PLAYERS, MAX_PLAYERS],
 }
 
 
@@ -128,6 +154,19 @@ def _is_int(value):
     return isinstance(value, int) and not isinstance(value, bool)
 
 
+def check_expand_margin(value):
+    if not _is_int(value) or not MIN_EXPAND_MARGIN <= value <= MAX_EXPAND_MARGIN:
+        raise GameError(f"Board margin must be a whole number from {MIN_EXPAND_MARGIN} to {MAX_EXPAND_MARGIN}.")
+
+
+def check_players(mode, count):
+    """Validate a room's player count for the given mode."""
+    if not _is_int(count) or not MIN_PLAYERS <= count <= MAX_PLAYERS:
+        raise GameError(f"A game needs {MIN_PLAYERS} to {MAX_PLAYERS} players.")
+    if mode == "classic" and count != 2:
+        raise GameError("Classic games are for two players. Use Wild for more.")
+
+
 def diff_views(old, new):
     """Patch that turns view `old` into view `new` ({} if they are identical).
 
@@ -157,6 +196,9 @@ class Player:
     score: int = 0
     pending: list = field(default_factory=list)  # tentative placements (see Room.place_tiles)
     preview: dict = None
+    staged: list = field(default_factory=list)  # word prepared off-turn (see Room.stage_tiles); private
+    staged_preview: dict = None
+    stage_note: str = None  # one-line explanation after staged tiles were loaded or blocked
     # What this player's browser has already been sent (see app.push_all).
     sent_view: dict = None
     sent_version: int = 0
@@ -166,17 +208,25 @@ class Player:
 # Room
 # --------------------------------------------------------------------------
 class Room:
-    def __init__(self, code, mode=DEFAULT_MODE, length=DEFAULT_LENGTH, timer=DEFAULT_TIMER, rng=None, clock=None):
+    def __init__(self, code, mode=DEFAULT_MODE, length=DEFAULT_LENGTH, timer=DEFAULT_TIMER, rng=None, clock=None,
+                 auto_expand=None, expand_margin=DEFAULT_EXPAND_MARGIN, max_players=DEFAULT_PLAYERS):
         if mode not in MODES:
             raise GameError("Unknown game type.")
         if length not in LENGTHS:
             raise GameError("Unknown game length.")
         if timer not in TIMERS:
             raise GameError("Unknown timer setting.")
+        if auto_expand is not None and not isinstance(auto_expand, bool):
+            raise GameError("Auto-expand must be on or off.")
+        check_expand_margin(expand_margin)
+        check_players(mode, max_players)
+        self.max_players = max_players  # the game starts when this many have joined
         self.code = code
         self.mode = mode
         self.length = length
         self.timer = timer
+        self._auto_expand = auto_expand  # None = follow the mode's default
+        self.expand_margin = expand_margin
         self.clock = clock or time.time  # injectable so tests can move time
         self.turn_deadline = None  # clock() value at which the current turn expires
         self._clock_sig = None
@@ -205,12 +255,28 @@ class Room:
         return MODE_RULES[self.mode]
 
     @property
+    def scoreless_limit(self):
+        """Consecutive scoreless turns that end the game: three full rounds."""
+        return SCORELESS_TURN_LIMIT // 2 * max(len(self.players), 2)
+
+    def _next_seat(self, seat):
+        return (seat + 1) % len(self.players)
+
+    @property
+    def auto_expand(self):
+        """Whether the board grows automatically (explicit choice, else on for wild only)."""
+        if self._auto_expand is not None:
+            return self._auto_expand
+        return self.mode == "wild"
+
+    @property
     def settings_locked(self):
         return self.turns_played > 0 or self.status == "finished"
 
     # ---- settings ----------------------------------------------------
-    def update_settings(self, player, mode=None, length=None, timer=None):
-        """Change game type, length and/or timer. Only possible before the first turn."""
+    def update_settings(self, player, mode=None, length=None, timer=None, auto_expand=None, expand_margin=None,
+                        max_players=None):
+        """Change game type, length, timer and/or board expansion. Only possible before the first turn."""
         if self.settings_locked:
             raise GameError("Settings can only be changed before the first turn is played.")
         if mode is not None and mode not in MODES:
@@ -219,28 +285,50 @@ class Room:
             raise GameError("Unknown game length.")
         if timer is not None and timer not in TIMERS:
             raise GameError("Unknown timer setting.")
+        if auto_expand is not None and not isinstance(auto_expand, bool):
+            raise GameError("Auto-expand must be on or off.")
+        if expand_margin is not None:
+            check_expand_margin(expand_margin)
         mode = mode or self.mode
         length = length or self.length
         timer = timer or self.timer
-        if (mode, length, timer) == (self.mode, self.length, self.timer):
+        expand_margin = expand_margin if expand_margin is not None else self.expand_margin
+        new_max = max_players if max_players is not None else self.max_players
+        if max_players is None and mode == "classic" and new_max != 2:
+            new_max = 2  # classic is two-player only
+        check_players(mode, new_max)
+        if new_max != self.max_players and self.status != "waiting":
+            raise GameError("The number of players can only be changed before the game starts.")
+        if new_max < len(self.players):
+            raise GameError("More players than that have already joined.")
+        expand_before = (self.auto_expand, self.expand_margin)
+        if auto_expand is not None:
+            self._auto_expand = auto_expand
+        if (mode, length, timer, expand_margin, new_max) == (
+            self.mode, self.length, self.timer, self.expand_margin, self.max_players
+        ) and self.auto_expand == expand_before[0]:
             return
         length_changed = length != self.length
         self.mode, self.length, self.timer = mode, length, timer
+        self.expand_margin = expand_margin
+        self.max_players = new_max
         if length_changed and self.status == "playing":
             self._deal()  # nobody has moved yet, so a fresh deal is fair
         for p in self.players:
             p.preview = self._preview(p)  # validity display depends on the mode
         label = {"wild": "Wild", "classic": "Classic"}[mode]
         clock = "no timer" if not TIMERS[timer] else f"{TIMERS[timer]}s per turn"
+        grow = f"board grows with {self.expand_margin}-ring margin" if self.auto_expand else "fixed board"
         self._log(
             "system",
             f"{player.name} set the game to {label} scoring, {length} length "
-            f"({LENGTHS[length]} tiles), {clock}.",
+            f"({LENGTHS[length]} tiles), {clock}, {grow}, {self.max_players} players.",
         )
+        self.maybe_start()  # lowering the player count may make the room full
 
     # ---- players -----------------------------------------------------
     def add_player(self, name):
-        if len(self.players) >= MAX_PLAYERS:
+        if len(self.players) >= self.max_players:
             raise GameError("This room is full.")
         seat = len(self.players)
         name = clean_name(name) or f"Player {seat + 1}"
@@ -264,6 +352,7 @@ class Room:
         self.version += 1
         self.last_active = time.time()
         self._sync_clock()  # a new turn gets a fresh clock the moment the action lands
+        self._reconcile_staged()  # revalidate prepared words / load them when their turn starts
 
     def connected_count(self):
         return sum(1 for p in self.players if p.connected)
@@ -276,11 +365,30 @@ class Room:
         self._sync_clock()
         self._log("system", f"Game started - {self.players[self.current].name} goes first.")
 
+    def maybe_start(self):
+        """Start automatically once the room is full. True if the game started."""
+        if self.status == "waiting" and MIN_PLAYERS <= len(self.players) == self.max_players:
+            self.start()
+            return True
+        return False
+
+    def start_now(self, player):
+        """The host (first player) starts a wild game before the room is full."""
+        if self.status != "waiting":
+            raise GameError("The game has already started.")
+        if player.seat != 0:
+            raise GameError("Only the host can start the game.")
+        if len(self.players) < MIN_PLAYERS:
+            raise GameError("Waiting for at least one more player.")
+        self.max_players = len(self.players)  # nobody else can join after this
+        self.start()
+
     def _deal(self):
         """Fill the bag for the chosen length and deal fresh racks."""
         self.bag = new_bag(self.rng)[: LENGTHS[self.length]]
         for player in self.players:
             self._clear_pending(player)
+            self._clear_staged(player)
             player.rack = self._draw(RACK_SIZE)
 
     # ---- turn clock --------------------------------------------------
@@ -338,18 +446,27 @@ class Room:
     def _clear_pending(self, player):
         player.pending = []
         player.preview = None
+        player.stage_note = None
+
+    def _clear_staged(self, player):
+        player.staged = []
+        player.staged_preview = None
+
+    @staticmethod
+    def _to_placements(items):
+        return [Placement(p["row"], p["col"], p["letter"], p["blank"]) for p in items]
 
     def _placements(self, player):
-        return [Placement(p["row"], p["col"], p["letter"], p["blank"]) for p in player.pending]
+        return self._to_placements(player.pending)
 
     def _end_turn_scoreless(self, player):
         """Common tail of pass/swap: count the scoreless turn and move on."""
         self.scoreless_turns += 1
         self.last_move = None
-        if self.scoreless_turns >= SCORELESS_TURN_LIMIT:
+        if self.scoreless_turns >= self.scoreless_limit:
             self._finish(out_seat=None)
         else:
-            self.current = 1 - player.seat
+            self.current = self._next_seat(player.seat)
 
     # ---- tentative placement -----------------------------------------
     def place_tiles(self, player, items):
@@ -361,6 +478,34 @@ class Room:
         submit and reported through the live `preview`.
         """
         self._require_free_turn(player)
+        pending = self._parse_placements(player, items)
+        player.stage_note = None
+        player.pending = pending
+        player.preview = self._preview(player)
+
+    def stage_tiles(self, player, items):
+        """Prepare a word while it is somebody else's turn (replaces any previous one).
+
+        Same input and sanity checks as `place_tiles`, but it is stored apart
+        from the tentative placement, checked against the board as it is now,
+        and never shown to anyone else. When the turn reaches the player the
+        staged tiles move into `pending` (see `_reconcile_staged`).
+        """
+        if self.status == "waiting":
+            raise GameError("Waiting for an opponent to join.")
+        if self.status == "finished":
+            raise GameError("The game is over.")
+        if player.seat == self.current:
+            raise GameError("It is your turn - place your tiles directly.")
+        if not player.rack:
+            raise GameError("You have no tiles left to stage.")
+        staged = self._parse_placements(player, items)
+        player.stage_note = None
+        player.staged = staged
+        player.staged_preview = self._preview_items(staged)
+
+    def _parse_placements(self, player, items):
+        """Validate raw placement items against the board and the player's rack."""
         if not isinstance(items, list):
             raise GameError("Invalid placement.")
         if len(items) > len(player.rack):
@@ -397,16 +542,57 @@ class Room:
             pending.append(
                 {"rack_index": index, "row": row, "col": col, "letter": letter, "blank": blank}
             )
+        return pending
 
-        player.pending = pending
-        player.preview = self._preview(player)
+    def _reconcile_staged(self):
+        """Keep every player's staged word in step with the room (runs on each change).
+
+        * Game not running: staged words are discarded.
+        * Not on turn: tiles whose square was just taken are dropped and the
+          preview is recomputed against the new board.
+        * On turn (and free to play): the surviving tiles become the tentative
+          placement, with a fresh preview, and the staged word is emptied.
+        """
+        for player in self.players:
+            if not player.staged:
+                player.staged_preview = None
+                continue
+            if self.status != "playing":
+                self._clear_staged(player)
+                continue
+            kept = [
+                item for item in player.staged
+                if 0 <= item["rack_index"] < len(player.rack)
+                and self.board.in_bounds(item["row"], item["col"])
+                and self.board.get(item["row"], item["col"]) is None
+            ]
+            dropped = len(player.staged) - len(kept)
+            blocked = ""
+            if dropped:
+                noun = "tile was" if dropped == 1 else "tiles were"
+                blocked = f"{dropped} staged {noun} blocked by the last play and removed."
+            if player.seat == self.current and not self.awaiting_final:
+                player.pending = kept
+                player.preview = self._preview(player)
+                self._clear_staged(player)
+                loaded = "Your staged word is loaded - check it, then play it." if kept else ""
+                player.stage_note = " ".join(part for part in (loaded, blocked) if part) or None
+            else:
+                player.staged = kept
+                player.staged_preview = self._preview_items(kept)
+                if blocked:
+                    player.stage_note = blocked
 
     def _preview(self, player):
         """What the current tentative placement would do, for the live score display."""
-        if not player.pending:
+        return self._preview_items(player.pending)
+
+    def _preview_items(self, items):
+        """What playing `items` (tentative or staged placements) would do on the board right now."""
+        if not items:
             return None
         try:
-            placements = self._placements(player)
+            placements = self._to_placements(items)
             words = self.board.analyze(placements)
         except GameError as exc:
             return {"ok": False, "error": str(exc), "words": [], "total": None, "bingo": False}
@@ -451,6 +637,7 @@ class Room:
         if self.mode == "wild":
             boosts = {(p.row, p.col): letter_boost(p.row, p.col) for p in placements}
         self.board.place_all(placements, boosts)
+        grew = self.auto_expand and self.board.expand_to_margin(self.expand_margin)
         self.turns_played += 1
         player.score += score.total
         self._clear_pending(player)
@@ -459,6 +646,8 @@ class Room:
         message = f"{player.name} played {', '.join(texts)} for {score.total}"
         message += f" (bingo, +{BINGO_BONUS}!)." if score.bingo else "."
         self._log("play", message, seat=player.seat)
+        if grew:
+            self._log("system", "The board expanded.")
 
         self.last_move = {
             "seat": player.seat,
@@ -475,12 +664,12 @@ class Room:
             if self.rules == "challenge":
                 # Give the opponent a chance to challenge before the game ends.
                 self.awaiting_final = True
-                self.current = 1 - player.seat
+                self.current = self._next_seat(player.seat)
                 self._log("system", f"{player.name} played every tile. Challenge or pass to accept.")
             else:
                 self._finish(out_seat=player.seat)
         else:
-            self.current = 1 - player.seat
+            self.current = self._next_seat(player.seat)
         return {"score": score.total, "words": texts, "bingo": score.bingo}
 
     def pass_turn(self, player):
@@ -541,6 +730,7 @@ class Room:
             if move["drawn"]:
                 del mover.rack[len(mover.rack) - len(move["drawn"]):]
             mover.rack.extend(move["used_tiles"])
+            self._clear_staged(mover)  # their rack was reshuffled by the take-back
             self.bag.extend(move["drawn"])
             self.rng.shuffle(self.bag)
             self.last_move = None
@@ -553,7 +743,7 @@ class Room:
                 f"{mover.name}'s play is removed and they lose their turn.",
                 seat=player.seat,
             )
-            if self.scoreless_turns >= SCORELESS_TURN_LIMIT:
+            if self.scoreless_turns >= self.scoreless_limit:
                 self._finish(out_seat=None)
             return {"success": True, "invalid": invalid}
 
@@ -570,7 +760,7 @@ class Room:
             self._finish(out_seat=mover.seat)
         else:
             self.scoreless_turns += 1
-            if self.scoreless_turns >= SCORELESS_TURN_LIMIT:
+            if self.scoreless_turns >= self.scoreless_limit:
                 self._finish(out_seat=None)
             else:
                 self.current = mover.seat
@@ -583,6 +773,7 @@ class Room:
         self.awaiting_final = False
         for player in self.players:
             self._clear_pending(player)
+            self._clear_staged(player)
         left = [sum(tile_value(t) for t in p.rack) for p in self.players]
         adjustments = [0] * len(self.players)
         if out_seat is None:
@@ -596,17 +787,20 @@ class Room:
         for player, delta in zip(self.players, adjustments):
             player.score += delta
 
-        scores = [p.score for p in self.players]
-        if scores[0] == scores[1]:
-            self.winner = "tie"
-        else:
-            self.winner = 0 if scores[0] > scores[1] else 1
+        best = max(p.score for p in self.players)
+        winners = [p.seat for p in self.players if p.score == best]
+        self.winner = winners[0] if len(winners) == 1 else "tie"
         self.final = {
             "out_seat": out_seat,
+            "winners": winners,
             "adjustments": adjustments,
             "racks": [list(p.rack) for p in self.players],
         }
-        result = "It's a tie!" if self.winner == "tie" else f"{self.players[self.winner].name} wins!"
+        if self.winner == "tie":
+            tied = " and ".join(self.players[s].name for s in winners)
+            result = "It's a tie!" if len(self.players) == 2 else f"It's a tie between {tied}!"
+        else:
+            result = f"{self.players[self.winner].name} wins!"
         self._log("system", f"Game over. {result}")
 
     # ---- views -------------------------------------------------------
@@ -649,6 +843,11 @@ class Room:
             "mode": self.mode,
             "length": self.length,
             "timer": self.timer,
+            "max_players": self.max_players,
+            "can_start": self.status == "waiting" and player.seat == 0 and len(self.players) >= MIN_PLAYERS,
+            "auto_expand": self.auto_expand,
+            "expand_margin": self.expand_margin,
+            "bounds": self.board.bounds(),
             "turn_ms_left": ms_left,
             "settings_locked": self.settings_locked,
             "status": self.status,
@@ -668,6 +867,14 @@ class Room:
             "board": self.board.to_dict(),
             "pending": pending,
             "preview": player.preview if mover is player else None,
+            # Prepared off-turn; only ever included in the owner's own view.
+            "staged": [
+                {"row": p["row"], "col": p["col"], "letter": p["letter"], "blank": p["blank"],
+                 "rack_index": p["rack_index"]}
+                for p in player.staged
+            ] if playing else [],
+            "staged_preview": player.staged_preview if playing else None,
+            "stage_note": player.stage_note,
             "rack": list(player.rack),
             "last_move": last,
             "can_challenge": can_challenge,
@@ -703,7 +910,8 @@ class RoomRegistry:
             return ""
         return code
 
-    def create(self, mode=DEFAULT_MODE, length=DEFAULT_LENGTH, timer=DEFAULT_TIMER):
+    def create(self, mode=DEFAULT_MODE, length=DEFAULT_LENGTH, timer=DEFAULT_TIMER,
+               auto_expand=None, expand_margin=DEFAULT_EXPAND_MARGIN, max_players=DEFAULT_PLAYERS):
         """Create a room. Settings default to Wild / full / no timer and can still be
         changed inside the room until the first turn is played."""
         with self._lock:
@@ -713,7 +921,8 @@ class RoomRegistry:
             code = new_room_code()
             while code in self._rooms:
                 code = new_room_code()
-            room = Room(code, mode=mode, length=length, timer=timer)
+            room = Room(code, mode=mode, length=length, timer=timer,
+                        auto_expand=auto_expand, expand_margin=expand_margin, max_players=max_players)
             self._rooms[code] = room
             return room
 

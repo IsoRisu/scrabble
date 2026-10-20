@@ -1,7 +1,7 @@
 """Flask + Flask-SocketIO entry point for the multiplayer Scrabble game.
 
 The server is the single source of truth: clients only send *intents*
-(place tiles, submit, pass, change settings, ...) and the server answers with per-player state
+(place or stage tiles, submit, pass, change settings, ...) and the server answers with per-player state
 views (a full snapshot on join, then diffs on every mutation).
 
 Run locally:   python app.py
@@ -28,7 +28,9 @@ from flask_socketio import SocketIO, join_room
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from game.board import GameError
-from game.room import CONFIG, LENGTHS, MODES, TIMERS, RoomRegistry, diff_views
+from game.room import (
+    CONFIG, DEFAULT_MODE, LENGTHS, MODES, TIMERS, RoomRegistry, check_expand_margin, check_players, diff_views,
+)
 
 log = logging.getLogger("scrabble")
 
@@ -91,6 +93,22 @@ def create_room():
         if not isinstance(value, str) or value not in allowed:
             return jsonify(error=f"Unknown {key}. Use one of: " + ", ".join(allowed)), 400
         options[key] = value
+    if payload.get("auto_expand") is not None:
+        if not isinstance(payload["auto_expand"], bool):
+            return jsonify(error="auto_expand must be true or false."), 400
+        options["auto_expand"] = payload["auto_expand"]
+    if payload.get("expand_margin") is not None:
+        try:
+            check_expand_margin(payload["expand_margin"])
+        except GameError as exc:
+            return jsonify(error=str(exc)), 400
+        options["expand_margin"] = payload["expand_margin"]
+    if payload.get("max_players") is not None:
+        try:
+            check_players(options.get("mode", DEFAULT_MODE), payload["max_players"])
+        except GameError as exc:
+            return jsonify(error=str(exc)), 400
+        options["max_players"] = payload["max_players"]
     try:
         room = REGISTRY.create(**options)
     except GameError as exc:
@@ -104,6 +122,7 @@ def create_room():
             mode=room.mode,
             length=room.length,
             timer=room.timer,
+            max_players=room.max_players,
         ),
         201,
     )
@@ -125,7 +144,7 @@ def room_info(code):
     if room is None:
         return jsonify(exists=False)
     return jsonify(
-        exists=True, status=room.status, players=len(room.players),
+        exists=True, status=room.status, players=len(room.players), max_players=room.max_players,
         mode=room.mode, length=room.length, timer=room.timer,
     )
 
@@ -222,8 +241,7 @@ def on_join(data=None):
         player.sent_view = None
         SESSIONS[request.sid] = (room.code, player.token)
         join_room(room.code)
-        if room.status == "waiting" and len(room.players) == 2:
-            room.start()
+        room.maybe_start()  # starts once the room has max_players players
         room.touch()
         push_all(room)
         return {"ok": True, "token": player.token, "seat": player.seat, "room": room.code}
@@ -286,18 +304,46 @@ def game_action(event):
 
 @game_action("update_settings")
 def on_update_settings(room, player, data):
-    """Change game settings: {"mode": "wild"|"classic", "length": "short"|"medium"|"full", "timer": "off"|"30s"|...}.
+    """Change game settings: {"mode": "wild"|"classic", "length": "short"|"medium"|"full", "timer": "off"|"30s"|...,
+    "auto_expand": bool, "expand_margin": 1-10, "max_players": 2-4 (wild only, before the game starts)}.
 
     Either player may do this, but only before the first turn has been played.
     """
-    room.update_settings(player, mode=data.get("mode"), length=data.get("length"), timer=data.get("timer"))
-    return {"mode": room.mode, "length": room.length, "timer": room.timer}
+    room.update_settings(
+        player,
+        mode=data.get("mode"),
+        length=data.get("length"),
+        timer=data.get("timer"),
+        auto_expand=data.get("auto_expand"),
+        expand_margin=data.get("expand_margin"),
+        max_players=data.get("max_players"),
+    )
+    return {
+        "mode": room.mode, "length": room.length, "timer": room.timer,
+        "auto_expand": room.auto_expand, "expand_margin": room.expand_margin,
+        "max_players": room.max_players,
+    }
+
+
+@game_action("start_game")
+def on_start_game(room, player, data):
+    """Host starts the game before the room is full (needs at least two players)."""
+    room.start_now(player)
 
 
 @game_action("place_tiles")
 def on_place_tiles(room, player, data):
     """Replace the player's tentative placement: {"placements": [{rack_index, row, col, letter?}]}."""
     room.place_tiles(player, data.get("placements"))
+
+
+@game_action("stage_tiles")
+def on_stage_tiles(room, player, data):
+    """Prepare a word while the opponent is on turn: {"placements": [{rack_index, row, col, letter?}]}.
+
+    Private to the sender; it becomes their tentative placement when their turn starts.
+    """
+    room.stage_tiles(player, data.get("placements"))
 
 
 @game_action("submit_word")

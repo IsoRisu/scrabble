@@ -40,6 +40,7 @@
   const SESSION_KEY = (room) => `scrabble.session.${room}`;
   const LAST_KEY = 'scrabble.last';
   const NAME_KEY = 'scrabble.name';
+  const ZOOM_KEY = 'scrabble.zoom';
 
   function loadSession(room) {
     try {
@@ -139,7 +140,9 @@
 
     // Local, optimistic view of my tentative placement. The server's copy
     // (S.pending) wins whenever no request is in flight.
-    const local = { pending: [], selected: null, inflight: 0 };
+    // `selected` is a rack tile picked for tap-to-place; `selectedBoard` is a tentative tile
+    // on the board picked up for moving (touch screens: a tap selects, it never removes).
+    const local = { pending: [], selected: null, selectedBoard: null, inflight: 0 };
 
     const els = {
       board: $('board'), rack: $('rack'), preview: $('preview'), banner: $('turn-banner'),
@@ -148,6 +151,7 @@
       submit: $('btn-submit'), recall: $('btn-recall'), swap: $('btn-swap'),
       pass: $('btn-pass'), challenge: $('btn-challenge'), modeLabel: $('mode-label'),
       settingsBtn: $('btn-settings'), info: $('btn-info'), timer: $('timer'),
+      boardScroll: $('board-scroll'), zoom: $('btn-zoom'),
     };
     let cells = [];          // cells[row][col] -> element
 
@@ -181,6 +185,10 @@
     const isPlaying = () => !!S && S.status === 'playing';
     const myTurn = () => isPlaying() && S.current === S.you;
     const canEdit = () => myTurn() && !S.awaiting_final;
+    // Off-turn players can stage (prepare) a word; it is private and loads into the real
+    // tentative placement when their turn starts. Both modes share the same placing UI.
+    const canStage = () => isPlaying() && !myTurn() && S.rack.length > 0;
+    const canPlace = () => canEdit() || canStage();
     const opponent = () => (S ? S.players.find((p) => p.seat !== S.you) || null : null);
     const tileValue = (letter) => (config && config.values[letter]) || 0;
 
@@ -383,7 +391,15 @@
     // ---------- rendering ----------
     function render() {
       if (!S || !config) return;
-      if (!cells.length) buildBoard();
+      if (!cells.length) {
+        buildBoard();
+        if (els.boardScroll.classList.contains('zoomed')) centerBoardOn(cells[config.center[0]][config.center[1]]);
+      }
+      // A picked-up board tile only stays selected while it is still mine to move.
+      if (local.selectedBoard && !(canPlace() && local.pending.some(
+        (p) => p.row === local.selectedBoard.row && p.col === local.selectedBoard.col))) {
+        local.selectedBoard = null;
+      }
       renderBanner();
       renderBoard();
       renderRack();
@@ -460,6 +476,7 @@
           h('h3', { text: 'How to play' }),
           h('ol', {},
             h('li', { text: 'Place letters: use the tiles near the bottom to make words. Select a tile and then its destination, or drag it there. The number on each tile is what that letter scores on the square it is on.' }),
+            h('li', { text: 'Plan ahead: while your opponent is playing you can already stage a word. It is checked and scored live, only you can see it, and it loads onto the board when your turn starts so you can review it and press Play word.' }),
             h('li', { text: "Can't form a word? Swap tiles with the Swap button above your letters, or press Pass Turn under the timer." }),
             h('li', { text: 'Winning: the player with the most points at the end of the game wins.' })),
           h('div', { class: 'actions' }, h('button', { class: 'btn btn-primary', type: 'button', text: 'Got it', onclick: () => api.close() })),
@@ -504,6 +521,7 @@
         cls = 'mine';
       } else {
         text = `${S.players[S.current].name}'s turn`;
+        if (canStage()) text += ' · stage your next word';
         cls = 'theirs';
       }
       if (S.status === 'playing' && opp && !opp.connected) text += ' — opponent is offline';
@@ -513,18 +531,22 @@
 
     function renderBoard() {
       const lastCells = new Set((S.last_move ? S.last_move.cells : []).map(([r, c]) => `${r},${c}`));
-      const mine = new Map();   // my tentative tiles (only while it is my turn to edit)
+      const mine = new Map();   // my tentative tiles (my turn) or my staged tiles (off turn)
       const theirs = new Map(); // opponent's tentative tiles, shown as ghosts
-      if (canEdit()) {
+      const staging = !canEdit() && canStage();
+      if (canEdit() || staging) {
         for (const p of local.pending) {
           const isBlank = S.rack[p.rack_index] === '?';
           mine.set(`${p.row},${p.col}`, { letter: p.letter, blank: isBlank, boost: letterMult(p.row, p.col) });
         }
-      } else if (isPlaying()) {
+      }
+      // A staged tile of mine wins a square the opponent is only hovering over (checked first below).
+      if (!canEdit() && isPlaying()) {
         for (const p of S.pending) theirs.set(`${p.row},${p.col}`, { letter: p.letter, blank: p.blank, boost: letterMult(p.row, p.col) });
       }
 
-      const placing = canEdit() && local.selected !== null;
+      const placing = canPlace() && (local.selected !== null || local.selectedBoard !== null);
+      const sb = local.selectedBoard;
       for (let r = 0; r < BOARD_SIZE; r += 1) {
         for (let c = 0; c < BOARD_SIZE; c += 1) {
           const key = `${r},${c}`;
@@ -533,14 +555,16 @@
           let sig;
           let kind = null;
           let info = null;
+          let sel = false;
           if (placed) {
             kind = lastCells.has(key) ? 'last' : '';
             info = { letter: placed.l, blank: placed.b, boost: placed.m || 1 };
             sig = `b:${placed.l}:${placed.b ? 1 : 0}:${info.boost}:${kind}`;
           } else if (mine.has(key)) {
-            kind = 'pending';
+            kind = staging ? 'pending staged' : 'pending';
             info = mine.get(key);
-            sig = `p:${S.mode}:${info.letter}:${info.blank ? 1 : 0}:${info.boost}`;
+            sel = !!sb && sb.row === r && sb.col === c;
+            sig = `p${staging ? 's' : ''}:${S.mode}:${info.letter}:${info.blank ? 1 : 0}:${info.boost}:${sel ? 1 : 0}`;
           } else if (theirs.has(key)) {
             kind = 'ghost';
             info = theirs.get(key);
@@ -553,9 +577,10 @@
           cell.dataset.sig = sig;
           cell.replaceChildren();
           if (info) {
-            const tile = makeTile(info.letter, info.blank, kind, info.boost || 1, S.mode === 'wild');
-            if (kind === 'pending') {
-              tile.setAttribute('title', 'Drag to move, tap to return to your rack');
+            const tile = makeTile(info.letter, info.blank, sel ? `${kind} selected` : kind, info.boost || 1, S.mode === 'wild');
+            if (kind.startsWith('pending')) {
+              tile.setAttribute('title', (staging ? 'Staged for your next turn. ' : '')
+                + 'Drag to move. Tap to pick it up, then tap a square (or the rack to take it back).');
             }
             cell.append(tile);
           } else if (cell.dataset.label) {
@@ -567,15 +592,16 @@
 
     function renderRack() {
       const used = new Set(local.pending.map((p) => p.rack_index));
+      const placeable = canPlace();
       els.rack.replaceChildren();
       if (S.status === 'waiting') {
         els.rack.append(h('span', { class: 'rack-hint', text: 'Your rack appears when the game starts.' }));
         return;
       }
       S.rack.forEach((letter, index) => {
-        if (canEdit() && used.has(index)) return;
+        if (placeable && used.has(index)) return;
         const blank = letter === '?';
-        const tile = makeTile(blank ? '' : letter, blank, local.selected === index && canEdit() ? 'selected' : '');
+        const tile = makeTile(blank ? '' : letter, blank, local.selected === index && placeable ? 'selected' : '');
         tile.dataset.index = String(index);
         tile.setAttribute('role', 'button');
         tile.setAttribute('aria-label', blank ? 'Blank tile' : `Tile ${letter}`);
@@ -621,22 +647,39 @@
       box.replaceChildren();
       if (!S || S.status === 'waiting') return;
       if (S.status === 'finished') return;
-      if (!canEdit()) {
-        if (S.last_move) {
-          const who = S.players[S.last_move.seat].name;
-          box.append(h('span', { class: 'pv-muted', text: `Last play: ${S.last_move.words.join(', ')} for ${S.last_move.score} (${who})` }));
-        }
+      const staging = !canEdit() && canStage();
+      const lastPlay = () => {
+        if (!S.last_move) return null;
+        const who = S.players[S.last_move.seat].name;
+        return h('span', { class: 'pv-muted', text: `Last play: ${S.last_move.words.join(', ')} for ${S.last_move.score} (${who})` });
+      };
+      if (!canEdit() && !staging) {
+        const last = lastPlay();
+        if (last) box.append(last);
+        return;
+      }
+      // Why staged tiles changed (loaded on my turn / blocked by the last play).
+      if (S.stage_note) box.append(h('div', { class: 'pv-note', text: S.stage_note }));
+      if (local.selectedBoard) {
+        box.append(h('span', { class: 'pv-muted', text: 'Tap a square to move this tile, or tap your rack to take it back.' }));
         return;
       }
       if (local.pending.length === 0) {
-        box.append(h('span', { class: 'pv-muted', text: 'Drag tiles onto the board, or tap a tile and then a square.' }));
+        if (staging) {
+          box.append(h('span', { class: 'pv-muted', text: 'Stage your next word while you wait: tap a tile, then a square. Only you can see it.' }));
+          const last = lastPlay();
+          if (last) box.append(h('div', {}, last));
+        } else {
+          box.append(h('span', { class: 'pv-muted', text: 'Tap a tile, then tap a square. You can also drag tiles onto the board.' }));
+        }
         return;
       }
-      if (local.inflight > 0 || !S.preview) {
+      const pv = staging ? S.staged_preview : S.preview;
+      if (local.inflight > 0 || !pv) {
         box.append(h('span', { class: 'pv-muted', text: 'Checking…' }));
         return;
       }
-      const pv = S.preview;
+      if (staging) box.append(h('span', { class: 'pv-muted', text: 'Staged: ' }));
       if (pv.words.length === 0) {
         box.append(h('span', { class: 'pv-muted', text: pv.error || '' }));
         return;
@@ -655,10 +698,13 @@
 
     function renderControls() {
       const edit = canEdit();
+      const staging = !edit && canStage();
       const hasPending = local.pending.length > 0;
       const previewOk = !S.preview || S.preview.ok;
       els.submit.disabled = !(edit && hasPending && previewOk && local.inflight === 0 && !busy);
-      els.recall.disabled = !(edit && hasPending);
+      els.submit.textContent = staging && hasPending ? 'Staged – plays on your turn' : 'Play word';
+      els.submit.title = staging && hasPending ? 'Your staged word loads on your turn; then press Play word.' : '';
+      els.recall.disabled = !((edit || staging) && hasPending);
       els.swap.disabled = !(edit && S.bag_count >= config.rack_size && !busy);
       els.swap.title = S.bag_count < config.rack_size ? 'Fewer than 7 tiles left in the bag' : '';
       els.pass.disabled = !(myTurn() && !busy);
@@ -669,8 +715,9 @@
 
     // ---------- server -> client ----------
     function serverPending() {
-      if (!S || !(isPlaying() && S.current === S.you)) return [];
-      return S.pending
+      if (!S || !isPlaying()) return [];
+      // My turn: my tentative tiles. Otherwise: the word I have staged (private, has rack indices).
+      return (S.current === S.you ? S.pending : (S.staged || []))
         .filter((p) => p.rack_index !== undefined)
         .map((p) => ({ rack_index: p.rack_index, row: p.row, col: p.col, letter: p.letter }));
     }
@@ -678,7 +725,7 @@
     function syncLocalFromServer() {
       if (local.inflight > 0) return;
       local.pending = serverPending();
-      if (!canEdit() || (local.selected !== null && (local.selected >= S.rack.length
+      if (!canPlace() || (local.selected !== null && (local.selected >= S.rack.length
           || local.pending.some((p) => p.rack_index === local.selected)))) {
         local.selected = null;
       }
@@ -698,6 +745,7 @@
 
     function onDiff(msg) {
       if (!S || msg.base !== version) { requestResync(); return; }
+      const prevNote = S.stage_note;
       for (const [key, value] of Object.entries(msg.patch)) {
         if (key === 'board') {
           for (const cell of value.del) delete S.board[cell];
@@ -712,6 +760,7 @@
       }
       syncLocalFromServer();
       render();
+      if (S.stage_note && S.stage_note !== prevNote) toast(S.stage_note);
     }
 
     function requestResync() {
@@ -745,7 +794,8 @@
       const placements = local.pending.map((p) => ({
         rack_index: p.rack_index, row: p.row, col: p.col, letter: p.letter,
       }));
-      socket.timeout(ACK_TIMEOUT).emit('place_tiles', { placements }, (err, res) => {
+      const event = canEdit() ? 'place_tiles' : 'stage_tiles';
+      socket.timeout(ACK_TIMEOUT).emit(event, { placements }, (err, res) => {
         local.inflight = Math.max(0, local.inflight - 1);
         if (err) toast('The server did not respond. Check your connection.', true);
         else if (!res || !res.ok) toast((res && res.error) || 'Could not place that tile.', true);
@@ -806,12 +856,12 @@
     }
 
     async function placeFromRack(index, row, col) {
-      if (!canEdit() || !isFreeSquare(row, col)) return;
+      if (!canPlace() || !isFreeSquare(row, col)) return;
       let letter = S.rack[index];
       if (letter === '?') {
         letter = await pickLetter();
         if (!letter) return;
-        if (!canEdit() || !isFreeSquare(row, col)) return; // things may have changed meanwhile
+        if (!canPlace() || !isFreeSquare(row, col)) return; // things may have changed meanwhile
       }
       local.pending = local.pending.filter((p) => p.rack_index !== index);
       local.pending.push({ rack_index: index, row, col, letter });
@@ -839,6 +889,13 @@
     let press = null;
     let highlighted = null;
     let suppressClickUntil = 0;
+    // Touch drags: ignore small finger wobble (so taps stay taps) and hold the tile above the
+    // fingertip, so the finger never hides the square being aimed at. The drop lands where the
+    // tile is shown, not under the finger.
+    const TOUCH_SLOP = 12;
+    const MOUSE_SLOP = 6;
+    const TOUCH_LIFT = 56;
+    const aimY = (y) => (press && press.touch ? y - TOUCH_LIFT : y);
 
     function targetAt(x, y) {
       const el = document.elementFromPoint(x, y);
@@ -865,10 +922,13 @@
     }
 
     function startPress(source, el, event) {
-      if (!canEdit() || press) return;
+      if (!canPlace() || press) return;
       if (event.button !== undefined && event.button !== 0) return;
       event.preventDefault();
-      press = { source, el, startX: event.clientX, startY: event.clientY, dragging: false, ghost: null, pointerId: event.pointerId };
+      press = {
+        source, el, startX: event.clientX, startY: event.clientY, dragging: false, ghost: null,
+        pointerId: event.pointerId, touch: event.pointerType !== 'mouse',
+      };
       document.addEventListener('pointermove', onPointerMove);
       document.addEventListener('pointerup', onPointerUp);
       document.addEventListener('pointercancel', onPointerCancel);
@@ -876,10 +936,11 @@
 
     function onPointerMove(event) {
       if (!press || event.pointerId !== press.pointerId) return;
-      if (!press.dragging && Math.hypot(event.clientX - press.startX, event.clientY - press.startY) > 6) {
+      const slop = press.touch ? TOUCH_SLOP : MOUSE_SLOP;
+      if (!press.dragging && Math.hypot(event.clientX - press.startX, event.clientY - press.startY) > slop) {
         press.dragging = true;
         press.ghost = press.el.cloneNode(true);
-        press.ghost.classList.remove('selected', 'pending', 'ghost', 'last', 'boosted', 'boost-2', 'boost-3');
+        press.ghost.classList.remove('selected', 'pending', 'staged', 'ghost', 'last', 'boosted', 'boost-2', 'boost-3');
         const src = press.source;
         const entry = src.type === 'board' ? local.pending.find((q) => q.row === src.row && q.col === src.col) : null;
         const letter = src.type === 'rack' ? S.rack[src.index] : (entry ? entry.letter : '');
@@ -888,13 +949,14 @@
         press.valueEl = press.ghost.querySelector('.v');
         if (press.valueEl) press.valueEl.textContent = String(press.baseValue);
         press.ghost.classList.add('drag-ghost');
+        if (press.touch) press.ghost.classList.add('touch');
         document.body.append(press.ghost);
         press.el.classList.add('dragging');
       }
       if (press.dragging) {
         press.ghost.style.left = `${event.clientX}px`;
-        press.ghost.style.top = `${event.clientY}px`;
-        const target = targetAt(event.clientX, event.clientY);
+        press.ghost.style.top = `${aimY(event.clientY)}px`;
+        const target = targetAt(event.clientX, aimY(event.clientY));
         setHighlight(dropIsValid(press.source, target) ? target.el : null);
         if (press.valueEl) {
           const mult = target && target.type === 'cell' ? letterMult(target.row, target.col) : 1;
@@ -921,11 +983,13 @@
 
     function onPointerUp(event) {
       if (!press || event.pointerId !== press.pointerId) return;
-      const target = press.dragging ? targetAt(event.clientX, event.clientY) : null;
+      const target = press.dragging ? targetAt(event.clientX, aimY(event.clientY)) : null;
       const p = endPress();
-      suppressClickUntil = performance.now() + 350; // swallow the click that follows a tile press
-      if (!canEdit()) return;
-      if (!p.dragging) { handleTap(p.source); return; }
+      // Swallow only the synthetic click that follows a tile press; a window any longer eats a
+      // quick "tap tile, tap square" on a phone.
+      suppressClickUntil = performance.now() + 120;
+      if (!canPlace()) return;
+      if (!p.dragging) { handleTap(p.source, p.touch); return; }
       if (!dropIsValid(p.source, target)) return;
       if (target.type === 'rack') {
         removePending(p.source.row, p.source.col);
@@ -936,11 +1000,21 @@
       }
     }
 
-    function handleTap(source) {
+    function handleTap(source, touch) {
       if (source.type === 'rack') {
         local.selected = local.selected === source.index ? null : source.index;
+        local.selectedBoard = null;
         renderRack();
         renderBoard();
+        renderPreview();
+      } else if (touch) {
+        // Fingers are imprecise: a tap only picks the tile up. Where it goes next is a second tap.
+        const same = local.selectedBoard && local.selectedBoard.row === source.row && local.selectedBoard.col === source.col;
+        local.selectedBoard = same ? null : { row: source.row, col: source.col };
+        local.selected = null;
+        renderRack();
+        renderBoard();
+        renderPreview();
       } else {
         removePending(source.row, source.col);
       }
@@ -963,9 +1037,55 @@
     els.board.addEventListener('click', (event) => {
       if (performance.now() < suppressClickUntil) return;
       const cell = event.target.closest('.cell');
-      if (!cell || !canEdit() || local.selected === null) return;
-      placeFromRack(local.selected, Number(cell.dataset.row), Number(cell.dataset.col));
+      if (!cell || !canPlace()) return;
+      const row = Number(cell.dataset.row);
+      const col = Number(cell.dataset.col);
+      if (local.selectedBoard) {
+        const from = local.selectedBoard;
+        local.selectedBoard = null;
+        movePending(from.row, from.col, row, col);
+        render();
+        return;
+      }
+      if (local.selected === null) return;
+      placeFromRack(local.selected, row, col);
     });
+
+    // With a board tile picked up, tapping the rack's empty area takes it back.
+    els.rack.addEventListener('click', (event) => {
+      if (event.target !== els.rack || !canPlace() || !local.selectedBoard) return;
+      const from = local.selectedBoard;
+      local.selectedBoard = null;
+      removePending(from.row, from.col);
+      render();
+    });
+
+    // No long-press context menu / image callout on tiles.
+    for (const el of [els.rack, els.board]) {
+      el.addEventListener('contextmenu', (event) => { if (event.target.closest('.tile')) event.preventDefault(); });
+    }
+
+    // ---------- zoom (small screens) ----------
+    // The 15x15 board is ~21px per square on a 375px phone. Zoom gives 44px squares in a scrollable frame.
+    function centerBoardOn(cell) {
+      const box = els.boardScroll;
+      if (!cell || box.scrollWidth <= box.clientWidth) return;
+      box.scrollTo({
+        left: cell.offsetLeft + cell.offsetWidth / 2 - box.clientWidth / 2,
+        top: cell.offsetTop + cell.offsetHeight / 2 - box.clientHeight / 2,
+      });
+    }
+    function setZoom(on, { center = true } = {}) {
+      els.boardScroll.classList.toggle('zoomed', on);
+      els.zoom.setAttribute('aria-pressed', on ? 'true' : 'false');
+      els.zoom.textContent = on ? 'Fit board' : 'Zoom board';
+      store.set(ZOOM_KEY, on ? '1' : '0');
+      if (on && center && cells.length) {
+        const target = local.pending[local.pending.length - 1];
+        centerBoardOn(target ? cells[target.row][target.col] : cells[config.center[0]][config.center[1]]);
+      }
+    }
+    els.zoom.addEventListener('click', () => setZoom(!els.boardScroll.classList.contains('zoomed')));
 
     // ---------- buttons ----------
     els.submit.addEventListener('click', () => {
@@ -978,7 +1098,7 @@
     });
 
     els.recall.addEventListener('click', () => {
-      if (!canEdit() || local.pending.length === 0) return;
+      if (!canPlace() || local.pending.length === 0) return;
       local.pending = [];
       local.selected = null;
       sendPlacements();
@@ -1020,6 +1140,7 @@
     els.shareUrl.addEventListener('focus', () => els.shareUrl.select());
 
     // ---------- boot ----------
+    if (store.get(ZOOM_KEY) === '1') setZoom(true, { center: false });
     els.modeLabel.textContent = `${modeLabel(document.body.dataset.mode)} · ${LENGTH_LABEL[document.body.dataset.length] || ''}${timerShort(document.body.dataset.timer)}`;
     if (session.token) {
       startSocket(); // saved session token -> rejoin automatically
