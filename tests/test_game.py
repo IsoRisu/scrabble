@@ -207,12 +207,48 @@ class ScoringTests(unittest.TestCase):
         self.assertEqual(result.total, expected)
 
 
+class WildScoringTests(unittest.TestCase):
+    """Wild mode: a tile placed on a DL/TL keeps its letter multiplier for good."""
+
+    def test_letter_boost_values(self):
+        from game.scoring import letter_boost
+        self.assertEqual(letter_boost(7, 3), 2)   # DL
+        self.assertEqual(letter_boost(5, 5), 3)   # TL
+        self.assertEqual(letter_boost(7, 7), 1)   # DW is a word premium, not a letter one
+        self.assertEqual(letter_boost(0, 0), 1)   # TW
+        self.assertEqual(letter_boost(1, 2), 1)   # plain square
+
+    def test_old_tile_counts_its_boost(self):
+        board = Board()
+        board.place_all(word_placements("CAT", 7, 6), boosts={(7, 6): 3})  # C is worth 3, boosted x3
+        words = board.analyze([P(7, 9, "S")])
+        self.assertEqual(score_move(words, 1).total, 9 + 1 + 1 + 1)
+
+    def test_old_boost_is_not_applied_twice_to_premium(self):
+        board = Board()
+        board.place_all(word_placements("HELLO", 7, 3), boosts={(7, 3): 2})  # H boosted x2 = 8
+        words = board.analyze([P(7, 8, "S")])
+        # H 8 + E + L + L + O + S = 13, no premium re-applied to old tiles
+        self.assertEqual(score_move(words, 1).total, 8 + 1 + 1 + 1 + 1 + 1)
+
+    def test_blank_stays_worth_zero_when_boosted(self):
+        board = Board()
+        board.place_all([P(7, 6, "C", True), P(7, 7, "A"), P(7, 8, "T")], boosts={(7, 6): 3})
+        words = board.analyze([P(7, 9, "S")])
+        self.assertEqual(score_move(words, 1).total, 0 + 1 + 1 + 1)
+
+    def test_board_snapshot_includes_boost(self):
+        board = Board()
+        board.place_all([P(7, 6, "C")], boosts={(7, 6): 2})
+        self.assertEqual(board.to_dict()["7,6"], {"l": "C", "b": False, "m": 2})
+
+
 WORDS = ["CAT", "CATS", "AT", "ON", "NO", "TO", "HELLO", "ACE", "DOG", "GO", "OX", "XI", "AX", "ZA", "QI"]
 
 
-def make_room(rules="strict", seed=1):
+def make_room(mode="wild", seed=1):
     set_words(WORDS)
-    room = Room("TESTROOM", rules=rules, rng=random.Random(seed))
+    room = Room("TESTROOM", mode=mode, rng=random.Random(seed))
     a = room.add_player("Alice")
     b = room.add_player("Bob")
     room.start()
@@ -441,13 +477,13 @@ class RoomFlowTests(unittest.TestCase):
 
 
 class ChallengeTests(unittest.TestCase):
-    def test_strict_mode_rejects_challenges(self):
-        room, a, b = make_room("strict")
+    def test_wild_mode_rejects_challenges(self):
+        room, a, b = make_room("wild")
         with self.assertRaisesRegex(GameError, "challenge mode"):
             room.challenge(room.players[room.current])
 
     def test_challenge_mode_accepts_bogus_word_then_challenge_reverts_it(self):
-        room, a, b = make_room("challenge")
+        room, a, b = make_room("classic")
         mover = room.players[room.current]
         opp = room.players[1 - room.current]
         give(mover, list("ZZQXJKV"))
@@ -476,7 +512,7 @@ class ChallengeTests(unittest.TestCase):
         self.assertEqual(room.scoreless_turns, 1)
 
     def test_failed_challenge_costs_the_challenger_their_turn(self):
-        room, a, b = make_room("challenge")
+        room, a, b = make_room("classic")
         mover = room.players[room.current]
         opp = room.players[1 - room.current]
         give(mover, list("CATSEEE"))
@@ -490,7 +526,7 @@ class ChallengeTests(unittest.TestCase):
             room.challenge(mover)
 
     def test_passing_closes_the_challenge_window(self):
-        room, a, b = make_room("challenge")
+        room, a, b = make_room("classic")
         mover = room.players[room.current]
         opp = room.players[1 - room.current]
         give(mover, list("CATSEEE"))
@@ -502,7 +538,7 @@ class ChallengeTests(unittest.TestCase):
             room.challenge(mover)
 
     def test_playing_on_replaces_the_challengeable_move(self):
-        room, a, b = make_room("challenge")
+        room, a, b = make_room("classic")
         mover = room.players[room.current]
         opp = room.players[1 - room.current]
         give(mover, list("CATSEEE"))
@@ -517,7 +553,7 @@ class ChallengeTests(unittest.TestCase):
         self.assertIs(room.players[room.current], opp)
 
     def test_cannot_challenge_own_move_or_out_of_turn(self):
-        room, a, b = make_room("challenge")
+        room, a, b = make_room("classic")
         mover = room.players[room.current]
         opp = room.players[1 - room.current]
         give(mover, list("CATSEEE"))
@@ -526,7 +562,7 @@ class ChallengeTests(unittest.TestCase):
             room.challenge(mover)
 
     def test_going_out_in_challenge_mode_waits_for_the_opponent(self):
-        room, a, b = make_room("challenge")
+        room, a, b = make_room("classic")
         mover = room.players[room.current]
         opp = room.players[1 - room.current]
         room.bag = []
@@ -544,7 +580,7 @@ class ChallengeTests(unittest.TestCase):
         self.assertEqual(room.status, "playing")
 
     def test_accepting_the_final_play_by_passing(self):
-        room, a, b = make_room("challenge")
+        room, a, b = make_room("classic")
         mover = room.players[room.current]
         opp = room.players[1 - room.current]
         room.bag = []
@@ -556,7 +592,7 @@ class ChallengeTests(unittest.TestCase):
         self.assertEqual(room.winner, mover.seat)
 
     def test_failed_challenge_on_final_play_ends_the_game(self):
-        room, a, b = make_room("challenge")
+        room, a, b = make_room("classic")
         mover = room.players[room.current]
         opp = room.players[1 - room.current]
         room.bag = []
@@ -565,6 +601,116 @@ class ChallengeTests(unittest.TestCase):
         move(room, mover, "CAT", 7, 6)
         room.challenge(opp)
         self.assertEqual(room.status, "finished")
+
+
+class ModeTests(unittest.TestCase):
+    def play_first(self, mode):
+        room, a, b = make_room(mode)
+        mover = room.players[room.current]
+        give(mover, list("HELLOXY"))
+        move(room, mover, "HELLO", 7, 3)  # H lands on the DL at (7,3)
+        return room, mover
+
+    def test_default_mode_is_wild_with_automatic_checking(self):
+        room = Room("X")
+        self.assertEqual((room.mode, room.rules, room.length), ("wild", "strict", "full"))
+
+    def test_wild_keeps_letter_boost_on_board(self):
+        room, _ = self.play_first("wild")
+        self.assertEqual(room.board.get(7, 3).boost, 2)   # H on DL
+        self.assertEqual(room.board.get(7, 4).boost, 1)
+        self.assertEqual(room.view_for(room.players[0])["board"]["7,3"]["m"], 2)
+
+    def test_classic_never_keeps_boost(self):
+        room, _ = self.play_first("classic")
+        self.assertTrue(all(t.boost == 1 for row in room.board.grid for t in row if t))
+
+    def test_wild_extension_scores_the_boosted_tile(self):
+        room, mover = self.play_first("wild")
+        other = room.players[room.current]
+        set_words(WORDS + ["HELLOS"])
+        give(other, list("SQQQQQQ"))
+        before = other.score
+        move(room, other, "S", 7, 8)  # HELLOS: H is now worth 8
+        self.assertEqual(other.score - before, 8 + 1 + 1 + 1 + 1 + 1)
+
+    def test_classic_extension_ignores_old_premium(self):
+        room, mover = self.play_first("classic")
+        other = room.players[room.current]
+        set_words(WORDS + ["HELLOS"])
+        give(other, list("SQQQQQQ"))
+        before = other.score
+        move(room, other, "S", 7, 8)
+        self.assertEqual(other.score - before, 4 + 1 + 1 + 1 + 1 + 1)
+
+    def test_wild_rejects_invalid_word_and_shows_validity(self):
+        room, a, b = make_room("wild")
+        mover = room.players[room.current]
+        give(mover, list("ZZQXJKV"))
+        room.place_tiles(mover, [{"rack_index": 0, "row": 7, "col": 7}, {"rack_index": 1, "row": 7, "col": 8}])
+        self.assertFalse(mover.preview["ok"])
+        self.assertIs(mover.preview["words"][0]["valid"], False)
+        with self.assertRaisesRegex(GameError, "dictionary"):
+            room.submit(mover)
+
+
+class SettingsTests(unittest.TestCase):
+    def test_either_player_can_change_settings_before_first_turn(self):
+        room, a, b = make_room("wild")
+        room.update_settings(a, mode="classic")
+        self.assertEqual((room.mode, room.rules), ("classic", "challenge"))
+        room.update_settings(b, length="short")
+        self.assertEqual(room.length, "short")
+
+    def test_length_controls_the_bag(self):
+        room, a, b = make_room("wild")
+        room.update_settings(a, length="short")
+        self.assertEqual(len(room.bag), 50 - 14)
+        self.assertTrue(all(len(p.rack) == 7 for p in room.players))
+        room.update_settings(a, length="medium")
+        self.assertEqual(len(room.bag), 75 - 14)
+
+    def test_settings_apply_before_the_opponent_joins(self):
+        set_words(WORDS)
+        room = Room("X", rng=random.Random(2))
+        p = room.add_player("Alice")
+        room.update_settings(p, mode="classic", length="medium")
+        room.add_player("Bob")
+        room.start()
+        self.assertEqual(len(room.bag), 75 - 14)
+        self.assertEqual(room.mode, "classic")
+
+    def test_settings_lock_after_first_turn(self):
+        room, a, b = make_room("wild")
+        self.assertFalse(room.view_for(a)["settings_locked"])
+        room.pass_turn(room.players[room.current])
+        self.assertTrue(room.view_for(a)["settings_locked"])
+        with self.assertRaisesRegex(GameError, "before the first turn"):
+            room.update_settings(a, mode="classic")
+
+    def test_invalid_settings_rejected(self):
+        room, a, b = make_room("wild")
+        with self.assertRaises(GameError):
+            room.update_settings(a, mode="chaos")
+        with self.assertRaises(GameError):
+            room.update_settings(a, length="endless")
+
+    def test_changing_mode_refreshes_preview_validity(self):
+        room, a, b = make_room("wild")
+        mover = room.players[room.current]
+        give(mover, list("ZZQXJKV"))
+        room.place_tiles(mover, [{"rack_index": 0, "row": 7, "col": 7}, {"rack_index": 1, "row": 7, "col": 8}])
+        self.assertFalse(mover.preview["ok"])
+        room.update_settings(mover, mode="classic")
+        self.assertTrue(mover.preview["ok"])
+        self.assertIsNone(mover.preview["words"][0]["valid"])
+
+    def test_view_exposes_mode_and_length(self):
+        room, a, b = make_room("classic")
+        view = room.view_for(a)
+        self.assertEqual((view["mode"], view["length"], view["rules"]), ("classic", "full", "challenge"))
+        self.assertEqual(CONFIG["modes"], ["wild", "classic"])
+        self.assertEqual(CONFIG["lengths"], {"short": 50, "medium": 75, "full": 100})
 
 
 class DiffTests(unittest.TestCase):
@@ -619,15 +765,16 @@ class MiscTests(unittest.TestCase):
 
     def test_registry(self):
         registry = RoomRegistry(max_rooms=2)
-        room = registry.create("strict")
+        room = registry.create()
         self.assertEqual(len(room.code), 8)
+        self.assertEqual((room.mode, room.length), ("wild", "full"))
         self.assertIs(registry.get(room.code.lower()), room)
         self.assertIsNone(registry.get("nope"))
         self.assertIsNone(registry.get(None))
         self.assertIsNone(registry.get("OOOOOOOO"))  # contains letters outside the alphabet
-        registry.create("challenge")
+        registry.create()
         with self.assertRaisesRegex(GameError, "busy"):
-            registry.create("strict")
+            registry.create()
 
     def test_registry_purges_stale_rooms(self):
         registry = RoomRegistry(abandoned_ttl=10)
@@ -636,9 +783,11 @@ class MiscTests(unittest.TestCase):
         registry.purge()
         self.assertIsNone(registry.get(room.code))
 
-    def test_unknown_rules(self):
+    def test_unknown_mode_and_length(self):
         with self.assertRaises(GameError):
-            Room("X", rules="chaos")
+            Room("X", mode="chaos")
+        with self.assertRaises(GameError):
+            Room("X", length="endless")
 
     def test_bundled_word_list(self):
         words = load_words()

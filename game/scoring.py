@@ -30,6 +30,11 @@ for _kind, _squares in (
         PREMIUM[_square] = _kind
 
 
+def letter_boost(row, col):
+    """The letter multiplier a tile earns by landing on (row, col): 2, 3 or 1."""
+    return {"DL": 2, "TL": 3}.get(PREMIUM.get((row, col)), 1)
+
+
 @dataclass(frozen=True)
 class MoveScore:
     total: int
@@ -38,11 +43,16 @@ class MoveScore:
 
 
 def score_word(word):
-    """Score one word. Premium squares only apply to tiles placed this turn."""
+    """Score one word. Premium squares only apply to tiles placed this turn.
+
+    Tiles already on the board count at their face value times the boost they
+    earned earlier (always 1 in Classic, 2 or 3 in Wild for tiles that were
+    placed on a letter premium).
+    """
     letters = 0
     word_multiplier = 1
     for cell in word.cells:
-        value = 0 if cell.blank else tile_value(cell.letter)
+        value = 0 if cell.blank else tile_value(cell.letter) * cell.boost
         if cell.new:
             premium = PREMIUM.get((cell.row, cell.col))
             if premium == "DL":

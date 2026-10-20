@@ -19,8 +19,9 @@ class GameError(Exception):
 # chose and `blank` is True.
 Placement = namedtuple("Placement", "row col letter blank")
 
-# A tile that is on the board.
-Tile = namedtuple("Tile", "letter blank")
+# A tile that is on the board. `boost` is the letter multiplier the tile
+# earned when it was placed (Wild scoring keeps it; Classic always uses 1).
+Tile = namedtuple("Tile", "letter blank boost", defaults=(1,))
 
 
 @dataclass(frozen=True)
@@ -30,6 +31,7 @@ class WordCell:
     letter: str
     blank: bool
     new: bool  # placed this turn (premium squares only count for new tiles)
+    boost: int = 1  # permanent letter multiplier already earned by an old tile
 
 
 @dataclass(frozen=True)
@@ -59,11 +61,13 @@ class Board:
     def is_empty(self):
         return self.tile_count == 0
 
-    def place_all(self, placements):
+    def place_all(self, placements, boosts=None):
+        """Put tiles on the board. `boosts` maps (row, col) -> permanent letter multiplier."""
+        boosts = boosts or {}
         for p in placements:
             if self.grid[p.row][p.col] is not None:
                 raise GameError("That square is already taken.")
-            self.grid[p.row][p.col] = Tile(p.letter, p.blank)
+            self.grid[p.row][p.col] = Tile(p.letter, p.blank, boosts.get((p.row, p.col), 1))
             self.tile_count += 1
 
     def remove_all(self, placements):
@@ -74,9 +78,9 @@ class Board:
                 self.tile_count -= 1
 
     def to_dict(self):
-        """JSON-friendly snapshot: {"row,col": {"l": letter, "b": is_blank}}."""
+        """JSON-friendly snapshot: {"row,col": {"l": letter, "b": is_blank, "m": boost}}."""
         return {
-            f"{r},{c}": {"l": tile.letter, "b": tile.blank}
+            f"{r},{c}": {"l": tile.letter, "b": tile.blank, "m": tile.boost}
             for r, row in enumerate(self.grid)
             for c, tile in enumerate(row)
             if tile is not None
@@ -151,7 +155,9 @@ class Board:
             cells = []
             while at(row, col) is not None:
                 tile = at(row, col)
-                cells.append(WordCell(row, col, tile.letter, tile.blank, (row, col) in new))
+                cells.append(
+                    WordCell(row, col, tile.letter, tile.blank, (row, col) in new, tile.boost)
+                )
                 row, col = row + dr, col + dc
             return Word(tuple(cells))
 

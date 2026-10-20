@@ -190,6 +190,10 @@ input[type="text"], select {
 .tile.pending { outline: 2px solid var(--gold); outline-offset: -1px; cursor: grab; touch-action: none; }
 .tile.ghost { opacity: .75; outline: 2px dashed #b58a00; outline-offset: -1px; }
 
+/* Wild mode: a tile that landed on a letter premium keeps its multiplied value. */
+.tile.boosted .v { color: #fff; background: var(--sq-dl); border-radius: 3px; padding: 0 2px; right: 5%; bottom: 3%; }
+.tile.boosted.boost-3 .v { background: var(--sq-tl); }
+
 /* ---------- rack ---------- */
 .rack {
   display: flex; justify-content: center; align-items: center; gap: 6px; flex-wrap: nowrap;
@@ -250,6 +254,12 @@ input[type="text"], select {
 .history li.challenge { color: var(--danger); }
 .history li.s0 { border-left: 3px solid #2a78b0; padding-left: 7px; }
 .history li.s1 { border-left: 3px solid #c4392d; padding-left: 7px; }
+
+/* ---------- game settings ---------- */
+.settings-card { background: var(--panel); border-radius: var(--radius); padding: 12px; }
+.settings-card h3 { margin: 0 0 8px; font-size: 14px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.settings-card .field { margin-bottom: 8px; }
+.settings-card .hint { margin: 6px 0 0; }
 
 /* ---------- modals ---------- */
 .modal-backdrop {

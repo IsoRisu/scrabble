@@ -6,13 +6,13 @@
   <title>Scrabble - room {{ code }}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body data-page="game" data-room="{{ code }}" data-rules="{{ rules }}">
+<body data-page="game" data-room="{{ code }}" data-mode="{{ mode }}" data-length="{{ length }}">
   <header class="topbar">
     <a class="brand" href="/">SCRABBLE</a>
     <div class="roominfo">
       Room <code id="room-code">{{ code }}</code>
       <span class="sep">&middot;</span>
-      <span id="rules-label"></span>
+      <span id="mode-label"></span>
     </div>
     <span id="conn" class="conn conn-wait" title="Connection status">connecting&hellip;</span>
   </header>
@@ -38,6 +38,20 @@
 
     <aside class="side-col">
       <div id="players" class="players"></div>
+
+      <div id="settings" class="settings-card" hidden>
+        <h3>Game settings</h3>
+        <label class="field">
+          <span>Mode</span>
+          <select id="set-mode" aria-label="Game mode"></select>
+        </label>
+        <label class="field">
+          <span>Length</span>
+          <select id="set-length" aria-label="Game length"></select>
+        </label>
+        <p id="mode-help" class="hint"></p>
+        <p class="hint">Either player can change these until the first turn is played.</p>
+      </div>
       <div class="bag">Tiles in bag: <b id="bag-count">&ndash;</b></div>
 
       <div id="share" class="share" hidden>

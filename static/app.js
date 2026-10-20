@@ -2,7 +2,7 @@
  * this file only renders what it is told and sends intents.
  *
  * Page 1 (index.html):  create a game / join by code / rejoin banner.
- * Page 2 (game.html):   board, rack, drag & drop, live state.
+ * Page 2 (game.html):   board, rack, drag & drop, live state, game settings.
  */
 (() => {
   'use strict';
@@ -73,7 +73,7 @@
         const res = await fetch('/create', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ rules: $('rules').value }),
+          body: '{}',
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || 'Could not create a game.');
@@ -146,9 +146,28 @@
       players: $('players'), history: $('history'), bag: $('bag-count'), conn: $('conn'),
       toast: $('toast'), share: $('share'), shareUrl: $('share-url'), modalRoot: $('modal-root'),
       submit: $('btn-submit'), recall: $('btn-recall'), swap: $('btn-swap'),
-      pass: $('btn-pass'), challenge: $('btn-challenge'), rules: $('rules-label'),
+      pass: $('btn-pass'), challenge: $('btn-challenge'), modeLabel: $('mode-label'),
+      settings: $('settings'), setMode: $('set-mode'), setLength: $('set-length'), modeHelp: $('mode-help'),
     };
     let cells = [];          // cells[row][col] -> element
+
+    // Display text for the game settings (the server owns the actual rules).
+    const MODE_INFO = {
+      wild: {
+        label: 'Wild',
+        help: 'Words are checked automatically. A tile placed on a double or triple letter square keeps that bonus for the rest of the game.',
+      },
+      classic: {
+        label: 'Classic',
+        help: 'Traditional scoring: premium squares only count when the tile is placed. Any play is accepted and your opponent may challenge it.',
+      },
+    };
+    const LENGTH_LABEL = { short: 'Short', medium: 'Medium', full: 'Full' };
+    const modeLabel = (mode) => (MODE_INFO[mode] ? MODE_INFO[mode].label : mode);
+    const lengthText = (length) => {
+      const tiles = config && config.lengths ? config.lengths[length] : null;
+      return `${LENGTH_LABEL[length] || length}${tiles ? ` (${tiles} tiles)` : ''}`;
+    };
 
     // ---------- derived state ----------
     const isPlaying = () => !!S && S.status === 'playing';
@@ -339,10 +358,15 @@
       }
     }
 
-    function makeTile(letter, blank, extra = '') {
+    // `boost` is the permanent letter multiplier a tile earned in Wild mode (1 = none).
+    function makeTile(letter, blank, extra = '', boost = 1) {
       const children = [h('span', { class: 'l', text: letter || '' })];
-      if (!blank) children.push(h('span', { class: 'v', text: String(tileValue(letter)) }));
-      return h('div', { class: `tile${blank ? ' blank' : ''}${extra ? ` ${extra}` : ''}` }, children);
+      const boosted = !blank && boost > 1;
+      if (!blank) children.push(h('span', { class: 'v', text: String(tileValue(letter) * (boosted ? boost : 1)) }));
+      const cls = `tile${blank ? ' blank' : ''}${boosted ? ` boosted boost-${boost}` : ''}${extra ? ` ${extra}` : ''}`;
+      const tile = h('div', { class: cls }, children);
+      if (boosted) tile.setAttribute('title', `Worth ${tileValue(letter) * boost} (x${boost} letter bonus kept)`);
+      return tile;
     }
 
     // ---------- rendering ----------
@@ -357,11 +381,34 @@
       renderPreview();
       renderControls();
       els.bag.textContent = String(S.bag_count);
-      els.rules.textContent = S.rules === 'challenge' ? 'Challenge rules' : 'Strict rules';
+      renderSettings();
+      els.modeLabel.textContent = `${modeLabel(S.mode)} · ${lengthText(S.length)}`;
       els.share.hidden = S.status !== 'waiting';
       if (S.status === 'waiting') els.shareUrl.value = `${window.location.origin}/join/${roomCode}`;
       document.title = `${myTurn() ? '▶ ' : ''}Scrabble – ${roomCode}`;
       showGameOver();
+    }
+
+    function renderSettings() {
+      const open = S.status !== 'finished' && !S.settings_locked;
+      els.settings.hidden = !open;
+      if (!open) return;
+      if (!els.setMode.options.length) {
+        for (const mode of config.modes) els.setMode.append(h('option', { value: mode, text: modeLabel(mode) }));
+        for (const length of Object.keys(config.lengths)) {
+          els.setLength.append(h('option', { value: length, text: lengthText(length) }));
+        }
+      }
+      els.setMode.value = S.mode;
+      els.setLength.value = S.length;
+      els.setMode.disabled = busy;
+      els.setLength.disabled = busy;
+      els.modeHelp.textContent = (MODE_INFO[S.mode] || {}).help || '';
+    }
+
+    function changeSettings(change) {
+      if (!S || S.settings_locked) return;
+      act('update_settings', change, () => toast('Game settings updated.'));
     }
 
     function renderBanner() {
@@ -414,8 +461,8 @@
           let info = null;
           if (placed) {
             kind = lastCells.has(key) ? 'last' : '';
-            info = { letter: placed.l, blank: placed.b };
-            sig = `b:${placed.l}:${placed.b ? 1 : 0}:${kind}`;
+            info = { letter: placed.l, blank: placed.b, boost: placed.m || 1 };
+            sig = `b:${placed.l}:${placed.b ? 1 : 0}:${info.boost}:${kind}`;
           } else if (mine.has(key)) {
             kind = 'pending';
             info = mine.get(key);
@@ -432,7 +479,7 @@
           cell.dataset.sig = sig;
           cell.replaceChildren();
           if (info) {
-            const tile = makeTile(info.letter, info.blank, kind);
+            const tile = makeTile(info.letter, info.blank, kind, info.boost || 1);
             if (kind === 'pending') {
               tile.setAttribute('title', 'Drag to move, tap to return to your rack');
             }
@@ -541,7 +588,7 @@
       els.swap.title = S.bag_count < config.rack_size ? 'Fewer than 7 tiles left in the bag' : '';
       els.pass.disabled = !(myTurn() && !busy);
       els.pass.textContent = S.awaiting_final ? 'Accept & end game' : 'Pass';
-      els.challenge.hidden = S.rules !== 'challenge';
+      els.challenge.hidden = S.mode !== 'classic';
       els.challenge.disabled = !(S.can_challenge && !busy);
     }
 
@@ -611,7 +658,7 @@
       });
     }
 
-    function renderControlsSafe() { if (S && config) renderControls(); }
+    function renderControlsSafe() { if (S && config) { renderControls(); renderSettings(); } }
 
     function sendPlacements() {
       if (!socket || !socket.connected) { toast('Not connected to the server.', true); return; }
@@ -850,6 +897,9 @@
 
     els.swap.addEventListener('click', openSwapModal);
 
+    els.setMode.addEventListener('change', () => changeSettings({ mode: els.setMode.value }));
+    els.setLength.addEventListener('change', () => changeSettings({ length: els.setLength.value }));
+
     els.pass.addEventListener('click', () => {
       if (!myTurn()) return;
       const question = S.awaiting_final ? 'Accept your opponent’s last play and end the game?' : 'Pass your turn?';
@@ -880,7 +930,7 @@
     els.shareUrl.addEventListener('focus', () => els.shareUrl.select());
 
     // ---------- boot ----------
-    els.rules.textContent = document.body.dataset.rules === 'challenge' ? 'Challenge rules' : 'Strict rules';
+    els.modeLabel.textContent = `${modeLabel(document.body.dataset.mode)} · ${LENGTH_LABEL[document.body.dataset.length] || ''}`;
     if (session.token) {
       startSocket(); // saved session token -> rejoin automatically
     } else {

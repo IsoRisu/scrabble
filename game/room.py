@@ -4,14 +4,25 @@ A Room is the single source of truth for one game. The Socket.IO layer in
 app.py never touches game state directly; it calls the methods here and then
 sends each player their own view of the result.
 
-Rule sets
----------
-strict     Every word is checked against the dictionary when a play is
-           submitted; invalid plays are rejected and the player can try again.
-challenge  Any geometrically legal play is accepted. The opponent may then
-           challenge it on their turn (``challenge_skip``): if a word is not in
-           the dictionary the play is taken back and the player loses their
-           turn; if all words are valid the challenger loses their own turn.
+Game settings
+-------------
+Both settings can be changed by either player until the first turn has been
+played (see ``Room.update_settings``); they are not chosen at room creation.
+
+mode  (scoring and word checking)
+  wild     The default. Every word is checked against the dictionary
+           automatically (the live preview shows validity and invalid plays
+           are rejected). A tile placed on a double/triple letter square keeps
+           its multiplied value for the rest of the game, so later words that
+           use it score the improved value.
+  classic  Traditional Scrabble scoring: premium squares only count on the
+           turn the tile is placed. Any geometrically legal play is accepted
+           and the opponent may challenge it on their turn
+           (``challenge_skip``): if a word is not in the dictionary the play is
+           taken back and the player loses their turn; if all words are valid
+           the challenger loses their own turn.
+
+length  (tiles in the bag): short, medium or full.
 """
 import os
 import random
@@ -21,7 +32,7 @@ import time
 from dataclasses import dataclass, field
 
 from .board import BOARD_SIZE, Board, GameError, Placement
-from .scoring import BINGO_BONUS, PREMIUM, score_move
+from .scoring import BINGO_BONUS, PREMIUM, letter_boost, score_move
 from .tiles import BLANK, RACK_SIZE, TILE_VALUES, new_bag, tile_value
 
 ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no 0/O/1/I
@@ -30,7 +41,17 @@ MAX_PLAYERS = 2
 MAX_NAME_LENGTH = 20
 HISTORY_LIMIT = 60
 SCORELESS_TURN_LIMIT = 6  # consecutive passes/swaps/failed challenges that end the game
-RULES = ("strict", "challenge")
+
+# Game settings.  "wild" is the default mode.  Each mode implies a rule set for
+# word checking: wild validates automatically ("strict"), classic uses
+# challenges ("challenge").
+MODES = ("wild", "classic")
+DEFAULT_MODE = "wild"
+MODE_RULES = {"wild": "strict", "classic": "challenge"}
+# Tiles in the bag at the start of the game (racks are dealt from it).
+LENGTHS = {"short": 50, "medium": 75, "full": 100}
+DEFAULT_LENGTH = "full"
+RULES = tuple(MODE_RULES.values())
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -42,6 +63,10 @@ CONFIG = {
     "center": [7, 7],
     "premiums": {f"{r},{c}": kind for (r, c), kind in PREMIUM.items()},
     "values": dict(TILE_VALUES),
+    "modes": list(MODES),
+    "default_mode": DEFAULT_MODE,
+    "lengths": dict(LENGTHS),
+    "default_length": DEFAULT_LENGTH,
 }
 
 
@@ -132,11 +157,15 @@ class Player:
 # Room
 # --------------------------------------------------------------------------
 class Room:
-    def __init__(self, code, rules="strict", rng=None):
-        if rules not in RULES:
-            raise GameError("Unknown rules.")
+    def __init__(self, code, mode=DEFAULT_MODE, length=DEFAULT_LENGTH, rng=None):
+        if mode not in MODES:
+            raise GameError("Unknown game type.")
+        if length not in LENGTHS:
+            raise GameError("Unknown game length.")
         self.code = code
-        self.rules = rules
+        self.mode = mode
+        self.length = length
+        self.turns_played = 0  # plays, passes, swaps and challenges so far
         self.rng = rng or random.Random()
         self.created = self.last_active = time.time()
         self.lock = threading.RLock()
@@ -154,6 +183,41 @@ class Room:
         self.history = []
         self._history_count = 0
         self.version = 0
+
+    @property
+    def rules(self):
+        """How words are checked: 'strict' (automatic) or 'challenge'."""
+        return MODE_RULES[self.mode]
+
+    @property
+    def settings_locked(self):
+        return self.turns_played > 0 or self.status == "finished"
+
+    # ---- settings ----------------------------------------------------
+    def update_settings(self, player, mode=None, length=None):
+        """Change the game type and/or length. Only possible before the first turn."""
+        if self.settings_locked:
+            raise GameError("Settings can only be changed before the first turn is played.")
+        if mode is not None and mode not in MODES:
+            raise GameError("Unknown game type.")
+        if length is not None and length not in LENGTHS:
+            raise GameError("Unknown game length.")
+        mode = mode or self.mode
+        length = length or self.length
+        if mode == self.mode and length == self.length:
+            return
+        length_changed = length != self.length
+        self.mode, self.length = mode, length
+        if length_changed and self.status == "playing":
+            self._deal()  # nobody has moved yet, so a fresh deal is fair
+        for p in self.players:
+            p.preview = self._preview(p)  # validity display depends on the mode
+        label = {"wild": "Wild", "classic": "Classic"}[mode]
+        self._log(
+            "system",
+            f"{player.name} set the game to {label} scoring, {length} length "
+            f"({LENGTHS[length]} tiles).",
+        )
 
     # ---- players -----------------------------------------------------
     def add_player(self, name):
@@ -186,12 +250,17 @@ class Room:
 
     def start(self):
         """Deal racks and pick who goes first (called once both players are in)."""
-        self.bag = new_bag(self.rng)
-        for player in self.players:
-            player.rack = self._draw(RACK_SIZE)
+        self._deal()
         self.current = self.rng.randrange(len(self.players))
         self.status = "playing"
         self._log("system", f"Game started - {self.players[self.current].name} goes first.")
+
+    def _deal(self):
+        """Fill the bag for the chosen length and deal fresh racks."""
+        self.bag = new_bag(self.rng)[: LENGTHS[self.length]]
+        for player in self.players:
+            self._clear_pending(player)
+            player.rack = self._draw(RACK_SIZE)
 
     # ---- internal helpers --------------------------------------------
     def _draw(self, count):
@@ -329,7 +398,12 @@ class Room:
             del player.rack[index]
         drawn = self._draw(len(used_indices))
         player.rack.extend(drawn)
-        self.board.place_all(placements)
+        # Wild scoring: a tile on a letter premium keeps its multiplier for good.
+        boosts = {}
+        if self.mode == "wild":
+            boosts = {(p.row, p.col): letter_boost(p.row, p.col) for p in placements}
+        self.board.place_all(placements, boosts)
+        self.turns_played += 1
         player.score += score.total
         self._clear_pending(player)
 
@@ -364,6 +438,7 @@ class Room:
     def pass_turn(self, player):
         self._require_turn(player)
         self._clear_pending(player)
+        self.turns_played += 1
         if self.awaiting_final:
             self._log("system", f"{player.name} accepted the final play.")
             self._finish(out_seat=self.last_move["seat"])
@@ -385,6 +460,7 @@ class Room:
             raise GameError(f"Fewer than {RACK_SIZE} tiles are left in the bag, so you cannot swap.")
 
         self._clear_pending(player)
+        self.turns_played += 1
         chosen = set(indices)
         returned = [t for i, t in enumerate(player.rack) if i in chosen]
         kept = [t for i, t in enumerate(player.rack) if i not in chosen]
@@ -406,6 +482,7 @@ class Room:
             raise GameError("There is no play to challenge.")
         mover = self.players[move["seat"]]
         self._clear_pending(player)
+        self.turns_played += 1
         invalid = [w for w in move["words"] if w not in get_words()]
 
         if invalid:
@@ -517,6 +594,9 @@ class Room:
         return {
             "room": self.code,
             "rules": self.rules,
+            "mode": self.mode,
+            "length": self.length,
+            "settings_locked": self.settings_locked,
             "status": self.status,
             "you": player.seat,
             "current": self.current if playing else None,
@@ -569,7 +649,8 @@ class RoomRegistry:
             return ""
         return code
 
-    def create(self, rules="strict"):
+    def create(self):
+        """Create a room with the default settings (changed later, in the room)."""
         with self._lock:
             self._purge_locked()
             if len(self._rooms) >= self.max_rooms:
@@ -577,7 +658,7 @@ class RoomRegistry:
             code = new_room_code()
             while code in self._rooms:
                 code = new_room_code()
-            room = Room(code, rules)
+            room = Room(code)
             self._rooms[code] = room
             return room
 
