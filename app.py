@@ -28,7 +28,7 @@ from flask_socketio import SocketIO, join_room
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from game.board import GameError
-from game.room import CONFIG, RULES, RoomRegistry, clean_name, diff_views
+from game.room import CONFIG, RoomRegistry, clean_name, diff_views
 
 log = logging.getLogger("scrabble")
 
@@ -74,15 +74,14 @@ def index():
 
 @app.post("/create")
 def create_room():
-    """Create a room and return its 8-character code and shareable URL."""
-    payload = request.get_json(silent=True)
-    rules = "strict"
-    if isinstance(payload, dict) and isinstance(payload.get("rules"), str):
-        rules = payload["rules"]
-    if rules not in RULES:
-        return jsonify(error="Unknown rules. Use one of: " + ", ".join(RULES)), 400
+    """Create a room and return its 8-character code and shareable URL.
+
+    The game type (Wild by default) and length are not chosen here; players
+    pick them inside the room until the first turn has been played
+    (socket event "update_settings").
+    """
     try:
-        room = REGISTRY.create(rules)
+        room = REGISTRY.create()
     except GameError as exc:
         return jsonify(error=str(exc)), 503
     path = f"/join/{room.code}"
@@ -91,6 +90,8 @@ def create_room():
             code=room.code,
             path=path,
             url=request.host_url.rstrip("/") + path,
+            mode=room.mode,
+            length=room.length,
             rules=room.rules,
         ),
         201,
@@ -103,7 +104,9 @@ def join_page(code):
     if room is None:
         message = "That room was not found. It may have expired - ask for a new link or create a game."
         return render_template("index.html", error=message), 404
-    return render_template("game.html", code=room.code, rules=room.rules)
+    return render_template(
+        "game.html", code=room.code, rules=room.rules, mode=room.mode, length=room.length
+    )
 
 
 @app.get("/api/room/<code>")
@@ -112,7 +115,14 @@ def room_info(code):
     room = REGISTRY.get(code)
     if room is None:
         return jsonify(exists=False)
-    return jsonify(exists=True, status=room.status, players=len(room.players), rules=room.rules)
+    return jsonify(
+        exists=True,
+        status=room.status,
+        players=len(room.players),
+        mode=room.mode,
+        length=room.length,
+        rules=room.rules,
+    )
 
 
 @app.get("/healthz")
@@ -247,6 +257,15 @@ def on_place_tiles(room, player, data):
     room.place_tiles(player, data.get("placements"))
 
 
+@game_action("update_settings")
+def on_update_settings(room, player, data):
+    """Change the game type and/or length: {"mode": "wild"|"classic", "length": "short"|"medium"|"full"}.
+
+    Either player may do this until the first turn has been played.
+    """
+    room.update_settings(player, data.get("mode"), data.get("length"))
+
+
 @game_action("submit_word")
 def on_submit_word(room, player, data):
     """Commit the tentative placement: validate, score, draw tiles, pass the turn."""
@@ -285,7 +304,6 @@ if __name__ == "__main__":
 # --------------------------------------------------------------------------
 # TODO - ideas for future versions (deliberately out of scope for v1)
 # --------------------------------------------------------------------------
-# TODO: Letter league scoring system.
 # TODO: Multiple language support. (Finnish, Spanish, Korean, Swedish, French)
 # TODO: Persist rooms (SQLite/Redis) so games survive restarts and so more than
 #       one gunicorn worker can be used (needs a Socket.IO message queue too).
