@@ -703,8 +703,9 @@ class RoomRegistry:
             return ""
         return code
 
-    def create(self):
-        """Create a room with the default settings (changed later, in the room)."""
+    def create(self, mode=DEFAULT_MODE, length=DEFAULT_LENGTH, timer=DEFAULT_TIMER):
+        """Create a room. Settings default to Wild / full / no timer and can still be
+        changed inside the room until the first turn is played."""
         with self._lock:
             self._purge_locked()
             if len(self._rooms) >= self.max_rooms:
@@ -712,7 +713,7 @@ class RoomRegistry:
             code = new_room_code()
             while code in self._rooms:
                 code = new_room_code()
-            room = Room(code)
+            room = Room(code, mode=mode, length=length, timer=timer)
             self._rooms[code] = room
             return room
 

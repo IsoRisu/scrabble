@@ -871,6 +871,13 @@ class MiscTests(unittest.TestCase):
         with self.assertRaisesRegex(GameError, "busy"):
             registry.create()
 
+    def test_registry_create_with_settings(self):
+        registry = RoomRegistry()
+        room = registry.create(mode="classic", length="short", timer="60s")
+        self.assertEqual((room.mode, room.length, room.timer), ("classic", "short", "60s"))
+        with self.assertRaises(GameError):
+            registry.create(mode="chaos")
+
     def test_registry_purges_stale_rooms(self):
         registry = RoomRegistry(abandoned_ttl=10)
         room = registry.create()

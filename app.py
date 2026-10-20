@@ -28,7 +28,7 @@ from flask_socketio import SocketIO, join_room
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from game.board import GameError
-from game.room import CONFIG, RoomRegistry, diff_views
+from game.room import CONFIG, LENGTHS, MODES, TIMERS, RoomRegistry, diff_views
 
 log = logging.getLogger("scrabble")
 
@@ -76,12 +76,23 @@ def index():
 def create_room():
     """Create a room and return its 8-character code and shareable URL.
 
-    Rooms start with the default settings (Wild mode, full length). Either
-    player changes them inside the room until the first turn is played, so no
-    request body is needed.
+    An optional JSON body may preselect the settings:
+    {"mode": "wild"|"classic", "length": "short"|"medium"|"full", "timer": "off"|"30s"|...}.
+    Anything left out uses the default (Wild, full, no timer). Either player can
+    still change the settings inside the room until the first turn is played.
     """
+    payload = request.get_json(silent=True)
+    payload = payload if isinstance(payload, dict) else {}
+    options = {}
+    for key, allowed in (("mode", MODES), ("length", LENGTHS), ("timer", TIMERS)):
+        value = payload.get(key)
+        if value is None:
+            continue
+        if not isinstance(value, str) or value not in allowed:
+            return jsonify(error=f"Unknown {key}. Use one of: " + ", ".join(allowed)), 400
+        options[key] = value
     try:
-        room = REGISTRY.create()
+        room = REGISTRY.create(**options)
     except GameError as exc:
         return jsonify(error=str(exc)), 503
     path = f"/join/{room.code}"

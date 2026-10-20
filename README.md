@@ -92,7 +92,8 @@ internet access (see TODO).
 | `swap_tiles` | `{indices: [...]}` | Needs at least 7 tiles in the bag. |
 | `challenge_skip` | `{}` | Classic mode only. |
 
-HTTP: `POST /create` takes no body and returns `{code, path, url, mode, length, timer}`;
+HTTP: `POST /create` takes an optional JSON body `{mode?, length?, timer?}` (same values as
+`update_settings`; defaults Wild / full / off; 400 on an unknown value) and returns `{code, path, url, mode, length, timer}`;
 `GET /api/room/<code>` returns `{exists, status, players, mode, length}`. Board cells in
 the state view are `{l: letter, b: is_blank, m: letter_boost}`, and the view carries
 `mode`, `length`, `timer`, `turn_ms_left`, `rules` (`strict` for Wild, `challenge` for Classic) and `settings_locked`.
