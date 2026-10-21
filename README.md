@@ -38,6 +38,13 @@ on the server (the single source of truth), vanilla JS/HTML/CSS on the client
   double/triple letter square shows its multiplied value (also while dragging). In Wild, the live
   preview marks every word with a tick or cross, and multiplied tiles are coloured in on the board.
 
+## Languages
+
+English is always available (`words.txt`). Finnish, Swedish, French and Spanish have tile sets and
+values in `game/tiles.py`, but a language only becomes selectable (create / settings dialog) once its
+word list exists as `data/<code>.txt` (`fi`, `sv`, `fr`, `es`; UTF-8, one word per line, accents kept).
+Every tile is one character, so Spanish has no CH/LL/RR tiles.
+
 ## Project layout
 
 ```

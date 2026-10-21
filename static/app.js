@@ -166,6 +166,7 @@
         help: 'Traditional scoring: premium squares only count when the tile is placed. Any play is accepted and your opponent may challenge it.',
       },
     };
+    const LANGUAGE_NAME = { en: 'English', fi: 'Suomi', fr: 'Français', es: 'Español', sv: 'Svenska' };
     const LENGTH_LABEL = { short: 'Short', medium: 'Medium', full: 'Full' };
     const timerText = (key) => {
       const secs = config && config.timers ? config.timers[key] : 0;
@@ -190,7 +191,10 @@
     const canStage = () => isPlaying() && !myTurn() && S.rack.length > 0;
     const canPlace = () => canEdit() || canStage();
     const opponent = () => (S ? S.players.find((p) => p.seat !== S.you) || null : null);
-    const tileValue = (letter) => (config && config.values[letter]) || 0;
+    const tileValue = (letter) => {
+      const values = config && config.values ? config.values[(S && S.language) || config.default_language] : null;
+      return (values && values[letter]) || 0;
+    };
 
     // ---------- toast / connection pill ----------
     let toastTimer = null;
@@ -270,8 +274,7 @@
         let chosen = null;
         showModal((modal, api) => {
           const grid = h('div', { class: 'letter-grid' });
-          for (let code = 65; code <= 90; code += 1) {
-            const letter = String.fromCharCode(code);
+          for (const letter of config.alphabets[(S && S.language) || config.default_language]) {
             grid.append(h('button', {
               class: 'btn', type: 'button', text: letter,
               onclick: () => { chosen = letter; api.close(); },
@@ -432,6 +435,10 @@
           Object.keys(config.lengths).map((l) => option(l, lengthText(l))));
         const timerSel = h('select', { 'aria-label': 'Timer' },
           Object.keys(config.timers).map((t) => option(t, timerText(t))));
+        const languages = config.languages || [config.default_language];
+        const languageSel = h('select', { 'aria-label': 'Language' },
+          languages.map((l) => option(l, LANGUAGE_NAME[l] || l)));
+        languageSel.value = S.language;
         modeSel.value = S.mode;
         lengthSel.value = S.length;
         timerSel.value = S.timer;
@@ -445,6 +452,7 @@
           if (modeSel.value !== S.mode) change.mode = modeSel.value;
           if (lengthSel.value !== S.length) change.length = lengthSel.value;
           if (timerSel.value !== S.timer) change.timer = timerSel.value;
+          if (languageSel.value !== S.language) change.language = languageSel.value;
           api.close();
           if (Object.keys(change).length) act('update_settings', change, () => toast('Game settings updated.'));
         };
@@ -454,6 +462,7 @@
           field('Scoring', modeSel), help,
           field('Length', lengthSel),
           field('Timer', timerSel),
+          ...(languages.length > 1 ? [field('Language', languageSel)] : []),
           h('div', { class: 'actions' },
             h('button', { class: 'btn', type: 'button', text: 'Cancel', onclick: () => api.close() }),
             h('button', { class: 'btn btn-primary', type: 'button', text: 'Save', onclick: save })),

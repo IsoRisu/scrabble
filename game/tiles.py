@@ -4,7 +4,9 @@ import random
 RACK_SIZE = 7
 BLANK = "?"
 
-# Language-specific tile distributions (100 tiles total except FR=102).
+# Language-specific tile distributions, including two blanks each. Every tile is a
+# single character because each board square holds one letter (so Spanish has no
+# CH/LL/RR tiles). French has 102 tiles; the "full" game length uses the first 100.
 TILE_DISTRIBUTIONS = {
     "en": {
         "A": 9, "B": 2, "C": 2, "D": 4, "E": 12, "F": 2, "G": 3, "H": 2, "I": 9,
@@ -25,9 +27,9 @@ TILE_DISTRIBUTIONS = {
         BLANK: 2,
     },
     "es": {
-        "A": 12, "B": 2, "C": 4, "CH": 1, "D": 5, "E": 12, "F": 1, "G": 2, "H": 2, "I": 6,
-        "J": 1, "L": 4, "LL": 1, "M": 2, "N": 5, "Ñ": 1, "O": 9, "P": 2, "Q": 1, "R": 5,
-        "RR": 1, "S": 6, "T": 4, "U": 5, "V": 1, "X": 1, "Y": 1, "Z": 1,
+        "A": 12, "B": 2, "C": 5, "D": 5, "E": 12, "F": 1, "G": 2, "H": 2, "I": 6,
+        "J": 1, "L": 5, "M": 2, "N": 5, "Ñ": 1, "O": 9, "P": 2, "Q": 1, "R": 6,
+        "S": 6, "T": 4, "U": 5, "V": 1, "X": 1, "Y": 1, "Z": 1,
         BLANK: 2,
     },
     "sv": {
@@ -59,9 +61,9 @@ TILE_VALUES = {
         BLANK: 0,
     },
     "es": {
-        "A": 1, "B": 3, "C": 3, "CH": 5, "D": 2, "E": 1, "F": 4, "G": 2, "H": 4, "I": 1,
-        "J": 8, "L": 1, "LL": 8, "M": 3, "N": 1, "Ñ": 8, "O": 1, "P": 3, "Q": 5, "R": 1,
-        "RR": 8, "S": 1, "T": 1, "U": 1, "V": 4, "X": 8, "Y": 4, "Z": 10,
+        "A": 1, "B": 3, "C": 3, "D": 2, "E": 1, "F": 4, "G": 2, "H": 4, "I": 1,
+        "J": 8, "L": 1, "M": 3, "N": 1, "Ñ": 8, "O": 1, "P": 3, "Q": 5, "R": 1,
+        "S": 1, "T": 1, "U": 1, "V": 4, "X": 8, "Y": 4, "Z": 10,
         BLANK: 0,
     },
     "sv": {
@@ -72,15 +74,23 @@ TILE_VALUES = {
     },
 }
 
+LANGUAGES = tuple(TILE_DISTRIBUTIONS)
+
+
+def alphabet(lang="en"):
+    """The letters (no blank) a tile can stand for in this language."""
+    return sorted(t for t in TILE_DISTRIBUTIONS[lang] if t != BLANK)
+
+
 def tile_value(tile, lang="en"):
     """Points for a rack tile: a letter, or BLANK."""
-    return TILE_VALUES.get(lang, TILE_VALUES["en"]).get(tile, 0)
+    return TILE_VALUES[lang].get(tile, 0)
 
 
 def new_bag(lang="en", rng=None):
     """Return a freshly shuffled bag containing all tiles for a language."""
     rng = rng or random.Random()
-    dist = TILE_DISTRIBUTIONS.get(lang, TILE_DISTRIBUTIONS["en"])
+    dist = TILE_DISTRIBUTIONS[lang]
     bag = [tile for tile, count in dist.items() for _ in range(count)]
     rng.shuffle(bag)
     return bag

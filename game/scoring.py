@@ -42,7 +42,7 @@ class MoveScore:
     bingo: bool
 
 
-def score_word(word):
+def score_word(word, lang="en"):
     """Score one word. Premium squares only apply to tiles placed this turn.
 
     Tiles already on the board count at their face value times the boost they
@@ -52,7 +52,7 @@ def score_word(word):
     letters = 0
     word_multiplier = 1
     for cell in word.cells:
-        value = 0 if cell.blank else tile_value(cell.letter) * cell.boost
+        value = 0 if cell.blank else tile_value(cell.letter, lang) * cell.boost
         if cell.new:
             premium = PREMIUM.get((cell.row, cell.col))
             if premium == "DL":
@@ -67,9 +67,9 @@ def score_word(word):
     return letters * word_multiplier
 
 
-def score_move(words, tiles_placed):
+def score_move(words, tiles_placed, lang="en"):
     """Total score for a play: every word formed plus the 50-point bingo bonus."""
-    word_scores = tuple(score_word(word) for word in words)
+    word_scores = tuple(score_word(word, lang) for word in words)
     bingo = tiles_placed == RACK_SIZE
     total = sum(word_scores) + (BINGO_BONUS if bingo else 0)
     return MoveScore(total=total, word_scores=word_scores, bingo=bingo)

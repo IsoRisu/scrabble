@@ -12,7 +12,10 @@ from game.room import (  # noqa: E402
     CONFIG, Room, RoomRegistry, clean_name, diff_views, load_words, set_words,
 )
 from game.scoring import PREMIUM, score_move  # noqa: E402
-from game.tiles import BLANK, TILE_DISTRIBUTION, TILE_VALUES, new_bag  # noqa: E402
+from game.tiles import BLANK, LANGUAGES, TILE_DISTRIBUTIONS, TILE_VALUES, new_bag  # noqa: E402
+
+TILE_DISTRIBUTION = TILE_DISTRIBUTIONS["en"]
+TILE_VALUES_EN = TILE_VALUES["en"]
 
 
 def P(row, col, letter, blank=False):
@@ -28,20 +31,20 @@ def word_placements(word, row, col, horizontal=True):
 
 class TileTests(unittest.TestCase):
     def test_bag_has_standard_distribution(self):
-        bag = new_bag(random.Random(1))
+        bag = new_bag("en", random.Random(1))
         self.assertEqual(len(bag), 100)
         for tile, count in TILE_DISTRIBUTION.items():
             self.assertEqual(bag.count(tile), count, tile)
         self.assertEqual(bag.count(BLANK), 2)
 
     def test_total_face_value(self):
-        total = sum(TILE_VALUES[t] * n for t, n in TILE_DISTRIBUTION.items())
+        total = sum(TILE_VALUES_EN[t] * n for t, n in TILE_DISTRIBUTION.items())
         self.assertEqual(total, 187)  # the well-known total for the English set
 
     def test_bag_is_shuffled_and_rng_is_respected(self):
-        a, b = new_bag(random.Random(5)), new_bag(random.Random(5))
+        a, b = new_bag("en", random.Random(5)), new_bag("en", random.Random(5))
         self.assertEqual(a, b)
-        self.assertNotEqual(a, new_bag(random.Random(6)))
+        self.assertNotEqual(a, new_bag("en", random.Random(6)))
 
 
 class PremiumTests(unittest.TestCase):
@@ -62,7 +65,7 @@ class PremiumTests(unittest.TestCase):
 
     def test_client_config_matches(self):
         self.assertEqual(len(CONFIG["premiums"]), len(PREMIUM))
-        self.assertEqual(CONFIG["values"]["Q"], 10)
+        self.assertEqual(CONFIG["values"]["en"]["Q"], 10)
 
 
 class BoardTests(unittest.TestCase):
@@ -201,9 +204,9 @@ class ScoringTests(unittest.TestCase):
         placements = word_placements("RETINAS", 7, 1)  # row 7, cols 1..7 (covers the star)
         result = self.score(Board(), placements)
         self.assertTrue(result.bingo)
-        letters = sum(TILE_VALUES[ch] for ch in "RETINAS")
+        letters = sum(TILE_VALUES_EN[ch] for ch in "RETINAS")
         # premium squares on row 7: (7,3) DL -> T doubled, (7,7) DW
-        expected = (letters + TILE_VALUES["T"]) * 2 + 50
+        expected = (letters + TILE_VALUES_EN["T"]) * 2 + 50
         self.assertEqual(result.total, expected)
 
 
@@ -417,7 +420,7 @@ class RoomFlowTests(unittest.TestCase):
         # every player loses the value of their own rack
         self.assertEqual(
             [a.score, b.score],
-            [-sum(TILE_VALUES[t] for t in a.rack), -sum(TILE_VALUES[t] for t in b.rack)],
+            [-sum(TILE_VALUES_EN[t] for t in a.rack), -sum(TILE_VALUES_EN[t] for t in b.rack)],
         )
         with self.assertRaisesRegex(GameError, "over"):
             room.pass_turn(room.players[0])
@@ -623,7 +626,7 @@ class ModeTests(unittest.TestCase):
 
     def test_classic_never_keeps_boost(self):
         room, _ = self.play_first("classic")
-        self.assertTrue(all(t.boost == 1 for row in room.board.grid for t in row if t))
+        self.assertTrue(all(t.boost == 1 for t in room.board.grid.values()))
 
     def test_wild_extension_scores_the_boosted_tile(self):
         room, mover = self.play_first("wild")
@@ -899,6 +902,89 @@ class MiscTests(unittest.TestCase):
         for w in ("ADJ", "XVIII", "BRRRR"):
             self.assertNotIn(w, words)
         self.assertTrue(all(2 <= len(w) <= 15 and w.isalpha() and w.isupper() for w in words))
+
+
+class LanguageTests(unittest.TestCase):
+    def setUp(self):
+        self._saved = dict(room_module._words)
+        set_words(["TERVE", "KÄÄ", "ÖÖ"], "fi")
+        self._exists = room_module.os.path.exists
+        # Pretend only the languages we install in a test have a word list on disk.
+        room_module.os.path.exists = lambda p: True if p.endswith("fi.txt") else self._exists(p)
+
+    def tearDown(self):
+        room_module.os.path.exists = self._exists
+        room_module._words.clear()
+        room_module._words.update(self._saved)
+
+    def test_tile_tables_are_consistent(self):
+        for lang in LANGUAGES:
+            dist, values = TILE_DISTRIBUTIONS[lang], TILE_VALUES[lang]
+            self.assertEqual(set(dist), set(values), lang)
+            self.assertTrue(all(len(t) == 1 for t in dist), lang)  # one letter per board square
+            self.assertEqual(values[BLANK], 0)
+            self.assertEqual(len(new_bag(lang, random.Random(1))), sum(dist.values()))
+
+    def test_unknown_or_unavailable_language_is_rejected(self):
+        with self.assertRaises(GameError):
+            Room("X", language="xx")
+        with self.assertRaises(GameError):
+            Room("X", language="sv")  # no data/sv.txt installed
+        with self.assertRaises(GameError):
+            RoomRegistry().create(language="klingon")
+
+    def test_non_ascii_words_survive_loading(self):
+        import tempfile
+        with tempfile.NamedTemporaryFile("w", suffix=".txt", encoding="utf-8", delete=False) as handle:
+            handle.write("kää\nÖÖ\nab1\n")
+        original = room_module.dictionary_path
+        room_module.dictionary_path = lambda lang: handle.name
+        try:
+            self.assertEqual(load_words("fi"), frozenset({"KÄÄ", "ÖÖ"}))
+        finally:
+            room_module.dictionary_path = original
+            os.unlink(handle.name)
+
+    def test_set_words_is_per_language(self):
+        set_words(["HELLO"], "en")
+        self.assertIn("HELLO", room_module.get_words("en"))
+        self.assertIn("TERVE", room_module.get_words("fi"))
+        self.assertNotIn("TERVE", room_module.get_words("en"))
+
+    def test_finnish_game_deals_finnish_tiles_and_values(self):
+        room = Room("FI", language="fi", rng=random.Random(3))
+        a, b = room.add_player("A"), room.add_player("B")
+        room.start()
+        letters = set(TILE_DISTRIBUTIONS["fi"])
+        self.assertTrue(all(t in letters for p in room.players for t in p.rack + room.bag))
+        self.assertEqual(len(room.bag) + 14, 100)
+        self.assertEqual(room.view_for(a)["language"], "fi")
+        self.assertEqual(CONFIG["values"]["fi"]["Ö"], 7)
+
+    def test_blank_may_stand_for_a_non_english_letter(self):
+        room = Room("FI", language="fi", rng=random.Random(3))
+        a, _ = room.add_player("A"), room.add_player("B")
+        room.start()
+        mover = room.players[room.current]
+        mover.rack[0] = BLANK
+        room.place_tiles(mover, [{"rack_index": 0, "row": 7, "col": 7, "letter": "ä"}])
+        self.assertEqual(mover.pending[0]["letter"], "Ä")
+        with self.assertRaises(GameError):
+            room.place_tiles(mover, [{"rack_index": 0, "row": 7, "col": 7, "letter": "W"}])  # not a Finnish tile
+
+    def test_scoring_uses_the_room_language(self):
+        words = Board().analyze([Placement(7, 7, "Ö", False), Placement(7, 8, "Ö", False)])
+        self.assertEqual(score_move(words, 2, "fi").total, (7 + 7) * 2)
+        self.assertEqual(score_move(words, 2, "en").total, 0)
+
+    def test_changing_language_redeals(self):
+        set_words(["TERVE"], "fi")
+        room = Room("CH", rng=random.Random(2))
+        a, _ = room.add_player("A"), room.add_player("B")
+        room.start()
+        room.update_settings(a, language="fi")
+        self.assertEqual(room.language, "fi")
+        self.assertTrue(all(t in TILE_DISTRIBUTIONS["fi"] for t in room.players[0].rack))
 
 
 if __name__ == "__main__":

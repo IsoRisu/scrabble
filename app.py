@@ -29,7 +29,8 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 from game.board import GameError
 from game.room import (
-    CONFIG, DEFAULT_MODE, LENGTHS, MODES, TIMERS, RoomRegistry, check_expand_margin, check_players, diff_views,
+    CONFIG, DEFAULT_MODE, LENGTHS, MODES, TIMERS, RoomRegistry, available_languages, check_expand_margin,
+    check_language, check_players, diff_views,
 )
 
 log = logging.getLogger("scrabble")
@@ -109,8 +110,14 @@ def create_room():
         except GameError as exc:
             return jsonify(error=str(exc)), 400
         options["max_players"] = payload["max_players"]
+    if payload.get("language") is not None:
+        try:
+            check_language(payload["language"])
+        except (GameError, TypeError) as exc:
+            return jsonify(error=str(exc)), 400
+        options["language"] = payload["language"]
     try:
-        room = REGISTRY.create(**options, language=payload.get("language", "en"))
+        room = REGISTRY.create(**options)
     except GameError as exc:
         return jsonify(error=str(exc)), 503
     path = f"/join/{room.code}"
@@ -173,7 +180,7 @@ def push_all(room):
         if player.sent_view is None:
             socketio.emit(
                 "state",
-                {"version": room.version, "config": CONFIG, "state": view},
+                {"version": room.version, "config": {**CONFIG, "languages": available_languages()}, "state": view},
                 to=player.sid,
             )
         else:
@@ -307,7 +314,7 @@ def game_action(event):
 def on_update_settings(room, player, data):
     """Change game settings: {"mode": "wild"|"classic", "length": "short"|"medium"|"full", "timer": "off"|"30s"|...,
     "auto_expand": bool, "expand_margin": 1-10, "max_players": 2-4 (wild only, before the game starts),
-    "language": "en"|"fi"|"fr"|"es"|"sv"}.
+    "language": "en"|"fi"|"fr"|"es"|"sv" (only those with a word list installed)}.
 
     Either player may do this, but only before the first turn has been played.
     """
@@ -387,7 +394,6 @@ if __name__ == "__main__":
 # --------------------------------------------------------------------------
 # TODO - ideas for future versions (deliberately out of scope for v1)
 # --------------------------------------------------------------------------
-# TODO: Multiple language support. (Finnish, Spanish, Korean, Swedish, French)
 # TODO: Persist rooms (SQLite/Redis) so games survive restarts and so more than
 #       one gunicorn worker can be used (needs a Socket.IO message queue too).
 # TODO: Accounts / auth instead of anonymous per-room session tokens.

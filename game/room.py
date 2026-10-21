@@ -52,7 +52,7 @@ from dataclasses import dataclass, field
 
 from .board import BOARD_SIZE, Board, GameError, Placement
 from .scoring import BINGO_BONUS, PREMIUM, letter_boost, score_move
-from .tiles import BLANK, RACK_SIZE, TILE_VALUES, new_bag, tile_value
+from .tiles import BLANK, LANGUAGES, RACK_SIZE, TILE_DISTRIBUTIONS, TILE_VALUES, new_bag, tile_value
 
 ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no 0/O/1/I
 ROOM_CODE_LENGTH = 8
@@ -76,6 +76,7 @@ RULES = tuple(MODE_RULES.values())
 # Per-turn timer options: key -> seconds (0 = no timer).
 TIMERS = {"off": 0, "30s": 30, "60s": 60, "90s": 90, "2m": 120, "3m": 180, "5m": 300}
 DEFAULT_TIMER = "off"
+DEFAULT_LANGUAGE = "en"
 # Auto board expansion: when a tile lands within `expand_margin` rings of the
 # edge the board grows so that many empty rings surround all tiles.  The toggle
 # defaults to on in wild, off in classic, unless a player sets it explicitly.
@@ -91,7 +92,9 @@ CONFIG = {
     "bingo_bonus": BINGO_BONUS,
     "center": [7, 7],
     "premiums": {f"{r},{c}": kind for (r, c), kind in PREMIUM.items()},
-    "values": dict(TILE_VALUES),
+    "values": {lang: dict(values) for lang, values in TILE_VALUES.items()},
+    "alphabets": {lang: sorted(t for t in dist if t != BLANK) for lang, dist in TILE_DISTRIBUTIONS.items()},
+    "default_language": DEFAULT_LANGUAGE,
     "modes": list(MODES),
     "default_mode": DEFAULT_MODE,
     "lengths": dict(LENGTHS),
@@ -108,28 +111,37 @@ CONFIG = {
 # --------------------------------------------------------------------------
 # Dictionary
 # --------------------------------------------------------------------------
-_words = None
+_words = {}  # language code -> frozenset of upper-case words
 _words_lock = threading.Lock()
 
 
-def load_words(lang="en"):
+def dictionary_path(lang):
+    """Word-list file for a language: words.txt for English, data/<lang>.txt for the rest."""
+    if lang == DEFAULT_LANGUAGE:
+        return os.environ.get("WORDS_FILE") or os.path.join(ROOT_DIR, "words.txt")
+    return os.path.join(ROOT_DIR, "data", f"{lang}.txt")
+
+
+def available_languages():
+    """Languages that can be played: those with tiles and a bundled word list."""
+    return [lang for lang in LANGUAGES if os.path.exists(dictionary_path(lang))]
+
+
+def check_language(lang):
+    if lang not in LANGUAGES:
+        raise GameError("Unknown language.")
+    if lang not in available_languages():
+        raise GameError("No word list is installed for that language yet.")
+
+
+def load_words(lang=DEFAULT_LANGUAGE):
     """Read a one-word-per-line file into an upper-case frozenset."""
-    path = os.environ.get("WORDS_FILE") or os.path.join(ROOT_DIR, "data", f"{lang}.txt")
-    if not os.path.exists(path):
-        # Fallback to english if language file is missing for now
-        path = os.path.join(ROOT_DIR, "words.txt")
-    with open(path, encoding="utf-8") as handle:
+    with open(dictionary_path(lang), encoding="utf-8") as handle:
         words = (line.strip().upper() for line in handle)
-        return frozenset(w for w in words if w.isascii() and w.isalpha())
+        return frozenset(w for w in words if w.isalpha())
 
 
-def get_words(lang="en"):
-    global _words
-    # Simplified cache - needs to be language-aware
-    if _words is None:
-        with _words_lock:
-            if _words is None:
-                _words = {}
+def get_words(lang=DEFAULT_LANGUAGE):
     if lang not in _words:
         with _words_lock:
             if lang not in _words:
@@ -137,10 +149,10 @@ def get_words(lang="en"):
     return _words[lang]
 
 
-def set_words(words):
-    """Replace the dictionary (used by tests)."""
-    global _words
-    _words = frozenset(w.upper() for w in words)
+def set_words(words, lang=DEFAULT_LANGUAGE):
+    """Replace a language's dictionary (used by tests)."""
+    with _words_lock:
+        _words[lang] = frozenset(w.upper() for w in words)
 
 
 # --------------------------------------------------------------------------
@@ -217,7 +229,8 @@ class Player:
 # --------------------------------------------------------------------------
 class Room:
     def __init__(self, code, mode=DEFAULT_MODE, length=DEFAULT_LENGTH, timer=DEFAULT_TIMER, rng=None, clock=None,
-                 auto_expand=None, expand_margin=DEFAULT_EXPAND_MARGIN, max_players=DEFAULT_PLAYERS):
+                 auto_expand=None, expand_margin=DEFAULT_EXPAND_MARGIN, max_players=DEFAULT_PLAYERS,
+                 language=DEFAULT_LANGUAGE):
         if mode not in MODES:
             raise GameError("Unknown game type.")
         if length not in LENGTHS:
@@ -228,12 +241,15 @@ class Room:
             raise GameError("Auto-expand must be on or off.")
         check_expand_margin(expand_margin)
         check_players(mode, max_players)
+        check_language(language)
+        self._auto_expand = auto_expand  # None = follow the mode's default
+        self.expand_margin = expand_margin
         self.max_players = max_players  # the game starts when this many have joined
         self.code = code
         self.mode = mode
         self.length = length
         self.timer = timer
-        self.language = language or "en"
+        self.language = language
         self.clock = clock or time.time  # injectable so tests can move time
         self.turn_deadline = None  # clock() value at which the current turn expires
         self._clock_sig = None
@@ -292,8 +308,8 @@ class Room:
             raise GameError("Unknown game length.")
         if timer is not None and timer not in TIMERS:
             raise GameError("Unknown timer setting.")
-        if language is not None and language not in ("en", "fi", "fr", "es", "sv"):
-            raise GameError("Unknown language.")
+        if language is not None:
+            check_language(language)
         if auto_expand is not None and not isinstance(auto_expand, bool):
             raise GameError("Auto-expand must be on or off.")
         if expand_margin is not None:
@@ -397,7 +413,7 @@ class Room:
 
     def _deal(self):
         """Fill the bag for the chosen length and deal fresh racks."""
-        self.bag = new_bag(self.rng)[: LENGTHS[self.length]]
+        self.bag = new_bag(self.language, self.rng)[: LENGTHS[self.length]]
         for player in self.players:
             self._clear_pending(player)
             self._clear_staged(player)
@@ -544,7 +560,7 @@ class Room:
             if raw == BLANK:
                 letter = item.get("letter")
                 letter = letter.upper() if isinstance(letter, str) else ""
-                if len(letter) != 1 or not "A" <= letter <= "Z":
+                if len(letter) != 1 or letter not in TILE_DISTRIBUTIONS[self.language] or letter == BLANK:
                     raise GameError("Choose a letter for the blank tile.")
                 blank = True
             else:
@@ -608,7 +624,7 @@ class Room:
             words = self.board.analyze(placements)
         except GameError as exc:
             return {"ok": False, "error": str(exc), "words": [], "total": None, "bingo": False}
-        result = score_move(words, len(placements))
+        result = score_move(words, len(placements), self.language)
         entries = []
         for word, points in zip(words, result.word_scores):
             # In challenge mode validity is deliberately not revealed.
@@ -635,7 +651,7 @@ class Room:
             bad = sorted({w.text for w in words if w.text not in get_words(self.language)})
             if bad:
                 raise GameError("Not in the dictionary: " + ", ".join(bad) + ".")
-        score = score_move(words, len(placements))
+        score = score_move(words, len(placements), self.language)
 
         # Take the tiles off the rack, draw replacements, put them on the board.
         used_indices = sorted({p["rack_index"] for p in player.pending})
@@ -786,7 +802,7 @@ class Room:
         for player in self.players:
             self._clear_pending(player)
             self._clear_staged(player)
-        left = [sum(tile_value(t) for t in p.rack) for p in self.players]
+        left = [sum(tile_value(t, self.language) for t in p.rack) for p in self.players]
         adjustments = [0] * len(self.players)
         if out_seat is None:
             for seat, points in enumerate(left):
@@ -924,7 +940,7 @@ class RoomRegistry:
         return code
 
     def create(self, mode=DEFAULT_MODE, length=DEFAULT_LENGTH, timer=DEFAULT_TIMER,
-               auto_expand=None, expand_margin=DEFAULT_EXPAND_MARGIN, max_players=DEFAULT_PLAYERS, language="en"):
+               auto_expand=None, expand_margin=DEFAULT_EXPAND_MARGIN, max_players=DEFAULT_PLAYERS, language=DEFAULT_LANGUAGE):
         """Create a room. Settings default to Wild / full / no timer and can still be
         changed inside the room until the first turn is played."""
         with self._lock:
@@ -935,7 +951,8 @@ class RoomRegistry:
             while code in self._rooms:
                 code = new_room_code()
             room = Room(code, mode=mode, length=length, timer=timer,
-                        auto_expand=auto_expand, expand_margin=expand_margin, max_players=max_players, language=language)
+                        auto_expand=auto_expand, expand_margin=expand_margin, max_players=max_players,
+                        language=language)
             self._rooms[code] = room
             return room
 
