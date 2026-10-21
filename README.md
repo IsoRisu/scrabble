@@ -153,7 +153,6 @@ text file; non-alphabetic lines are ignored).
 ## Known limitations
 
 - In-memory state only; one worker; a restart loses all games.
-- Two players per room. No accounts, chat, timers or AI opponent.
 - The client depends on the Socket.IO CDN script.
 
 ## TODO
@@ -162,7 +161,6 @@ text file; non-alphabetic lines are ignored).
 - [ ] Accounts / auth instead of anonymous session tokens.
 - [ ] In-game chat.
 - [ ] AI opponent.
-- [ ] 3-4 player rooms.
 - [ ] Full official dictionary, selectable per room.
 - [ ] Automatic forfeits for abandoned games.
 - [ ] Rematch, spectators, GCG move-log export.
