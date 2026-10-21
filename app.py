@@ -110,7 +110,7 @@ def create_room():
             return jsonify(error=str(exc)), 400
         options["max_players"] = payload["max_players"]
     try:
-        room = REGISTRY.create(**options)
+        room = REGISTRY.create(**options, language=payload.get("language", "en"))
     except GameError as exc:
         return jsonify(error=str(exc)), 503
     path = f"/join/{room.code}"
@@ -123,6 +123,7 @@ def create_room():
             length=room.length,
             timer=room.timer,
             max_players=room.max_players,
+            language=room.language,
         ),
         201,
     )
@@ -134,7 +135,7 @@ def join_page(code):
     if room is None:
         message = "That room was not found. It may have expired - ask for a new link or create a game."
         return render_template("index.html", error=message), 404
-    return render_template("game.html", code=room.code, mode=room.mode, length=room.length, timer=room.timer)
+    return render_template("game.html", code=room.code, mode=room.mode, length=room.length, timer=room.timer, language=room.language)
 
 
 @app.get("/api/room/<code>")
@@ -145,7 +146,7 @@ def room_info(code):
         return jsonify(exists=False)
     return jsonify(
         exists=True, status=room.status, players=len(room.players), max_players=room.max_players,
-        mode=room.mode, length=room.length, timer=room.timer,
+        mode=room.mode, length=room.length, timer=room.timer, language=room.language,
     )
 
 
@@ -305,7 +306,8 @@ def game_action(event):
 @game_action("update_settings")
 def on_update_settings(room, player, data):
     """Change game settings: {"mode": "wild"|"classic", "length": "short"|"medium"|"full", "timer": "off"|"30s"|...,
-    "auto_expand": bool, "expand_margin": 1-10, "max_players": 2-4 (wild only, before the game starts)}.
+    "auto_expand": bool, "expand_margin": 1-10, "max_players": 2-4 (wild only, before the game starts),
+    "language": "en"|"fi"|"fr"|"es"|"sv"}.
 
     Either player may do this, but only before the first turn has been played.
     """
@@ -317,11 +319,12 @@ def on_update_settings(room, player, data):
         auto_expand=data.get("auto_expand"),
         expand_margin=data.get("expand_margin"),
         max_players=data.get("max_players"),
+        language=data.get("language"),
     )
     return {
         "mode": room.mode, "length": room.length, "timer": room.timer,
         "auto_expand": room.auto_expand, "expand_margin": room.expand_margin,
-        "max_players": room.max_players,
+        "max_players": room.max_players, "language": room.language,
     }
 
 

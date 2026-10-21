@@ -112,21 +112,29 @@ _words = None
 _words_lock = threading.Lock()
 
 
-def load_words(path=None):
+def load_words(lang="en"):
     """Read a one-word-per-line file into an upper-case frozenset."""
-    path = path or os.environ.get("WORDS_FILE") or os.path.join(ROOT_DIR, "words.txt")
+    path = os.environ.get("WORDS_FILE") or os.path.join(ROOT_DIR, "data", f"{lang}.txt")
+    if not os.path.exists(path):
+        # Fallback to english if language file is missing for now
+        path = os.path.join(ROOT_DIR, "words.txt")
     with open(path, encoding="utf-8") as handle:
         words = (line.strip().upper() for line in handle)
         return frozenset(w for w in words if w.isascii() and w.isalpha())
 
 
-def get_words():
+def get_words(lang="en"):
     global _words
+    # Simplified cache - needs to be language-aware
     if _words is None:
         with _words_lock:
             if _words is None:
-                _words = load_words()
-    return _words
+                _words = {}
+    if lang not in _words:
+        with _words_lock:
+            if lang not in _words:
+                _words[lang] = load_words(lang)
+    return _words[lang]
 
 
 def set_words(words):
@@ -225,8 +233,7 @@ class Room:
         self.mode = mode
         self.length = length
         self.timer = timer
-        self._auto_expand = auto_expand  # None = follow the mode's default
-        self.expand_margin = expand_margin
+        self.language = language or "en"
         self.clock = clock or time.time  # injectable so tests can move time
         self.turn_deadline = None  # clock() value at which the current turn expires
         self._clock_sig = None
@@ -237,7 +244,7 @@ class Room:
 
         self.players = []
         self.board = Board()
-        self.bag = []
+        self.bag = new_bag(self.language, self.rng)[: LENGTHS[self.length]]
         self.status = "waiting"  # waiting -> playing -> finished
         self.current = 0  # seat whose turn it is
         self.scoreless_turns = 0
@@ -275,8 +282,8 @@ class Room:
 
     # ---- settings ----------------------------------------------------
     def update_settings(self, player, mode=None, length=None, timer=None, auto_expand=None, expand_margin=None,
-                        max_players=None):
-        """Change game type, length, timer and/or board expansion. Only possible before the first turn."""
+                        max_players=None, language=None):
+        """Change game type, length, timer, board expansion, and language. Only possible before the first turn."""
         if self.settings_locked:
             raise GameError("Settings can only be changed before the first turn is played.")
         if mode is not None and mode not in MODES:
@@ -285,6 +292,8 @@ class Room:
             raise GameError("Unknown game length.")
         if timer is not None and timer not in TIMERS:
             raise GameError("Unknown timer setting.")
+        if language is not None and language not in ("en", "fi", "fr", "es", "sv"):
+            raise GameError("Unknown language.")
         if auto_expand is not None and not isinstance(auto_expand, bool):
             raise GameError("Auto-expand must be on or off.")
         if expand_margin is not None:
@@ -292,6 +301,7 @@ class Room:
         mode = mode or self.mode
         length = length or self.length
         timer = timer or self.timer
+        language = language or self.language
         expand_margin = expand_margin if expand_margin is not None else self.expand_margin
         new_max = max_players if max_players is not None else self.max_players
         if max_players is None and mode == "classic" and new_max != 2:
@@ -304,15 +314,17 @@ class Room:
         expand_before = (self.auto_expand, self.expand_margin)
         if auto_expand is not None:
             self._auto_expand = auto_expand
-        if (mode, length, timer, expand_margin, new_max) == (
-            self.mode, self.length, self.timer, self.expand_margin, self.max_players
+        if (mode, length, timer, expand_margin, new_max, language) == (
+            self.mode, self.length, self.timer, self.expand_margin, self.max_players, self.language
         ) and self.auto_expand == expand_before[0]:
             return
         length_changed = length != self.length
+        language_changed = language != self.language
         self.mode, self.length, self.timer = mode, length, timer
         self.expand_margin = expand_margin
         self.max_players = new_max
-        if length_changed and self.status == "playing":
+        self.language = language
+        if (length_changed or language_changed) and self.status == "playing":
             self._deal()  # nobody has moved yet, so a fresh deal is fair
         for p in self.players:
             p.preview = self._preview(p)  # validity display depends on the mode
@@ -322,7 +334,7 @@ class Room:
         self._log(
             "system",
             f"{player.name} set the game to {label} scoring, {length} length "
-            f"({LENGTHS[length]} tiles), {clock}, {grow}, {self.max_players} players.",
+            f"({LENGTHS[length]} tiles), {clock}, {grow}, {self.max_players} players, language {language}.",
         )
         self.maybe_start()  # lowering the player count may make the room full
 
@@ -600,7 +612,7 @@ class Room:
         entries = []
         for word, points in zip(words, result.word_scores):
             # In challenge mode validity is deliberately not revealed.
-            valid = (word.text in get_words()) if self.rules == "strict" else None
+            valid = (word.text in get_words(self.language)) if self.rules == "strict" else None
             entries.append({"word": word.text, "score": points, "valid": valid})
         bad = [e["word"] for e in entries if e["valid"] is False]
         return {
@@ -620,7 +632,7 @@ class Room:
         placements = self._placements(player)
         words = self.board.analyze(placements)
         if self.rules == "strict":
-            bad = sorted({w.text for w in words if w.text not in get_words()})
+            bad = sorted({w.text for w in words if w.text not in get_words(self.language)})
             if bad:
                 raise GameError("Not in the dictionary: " + ", ".join(bad) + ".")
         score = score_move(words, len(placements))
@@ -720,7 +732,7 @@ class Room:
         mover = self.players[move["seat"]]
         self._clear_pending(player)
         self.turns_played += 1
-        invalid = [w for w in move["words"] if w not in get_words()]
+        invalid = [w for w in move["words"] if w not in get_words(self.language)]
 
         if invalid:
             # Challenge succeeded: take the play back. It is the challenger's
@@ -843,6 +855,7 @@ class Room:
             "mode": self.mode,
             "length": self.length,
             "timer": self.timer,
+            "language": self.language,
             "max_players": self.max_players,
             "can_start": self.status == "waiting" and player.seat == 0 and len(self.players) >= MIN_PLAYERS,
             "auto_expand": self.auto_expand,
@@ -911,7 +924,7 @@ class RoomRegistry:
         return code
 
     def create(self, mode=DEFAULT_MODE, length=DEFAULT_LENGTH, timer=DEFAULT_TIMER,
-               auto_expand=None, expand_margin=DEFAULT_EXPAND_MARGIN, max_players=DEFAULT_PLAYERS):
+               auto_expand=None, expand_margin=DEFAULT_EXPAND_MARGIN, max_players=DEFAULT_PLAYERS, language="en"):
         """Create a room. Settings default to Wild / full / no timer and can still be
         changed inside the room until the first turn is played."""
         with self._lock:
@@ -922,7 +935,7 @@ class RoomRegistry:
             while code in self._rooms:
                 code = new_room_code()
             room = Room(code, mode=mode, length=length, timer=timer,
-                        auto_expand=auto_expand, expand_margin=expand_margin, max_players=max_players)
+                        auto_expand=auto_expand, expand_margin=expand_margin, max_players=max_players, language=language)
             self._rooms[code] = room
             return room
 
