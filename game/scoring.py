@@ -30,9 +30,33 @@ for _kind, _squares in (
         PREMIUM[_square] = _kind
 
 
+# The premium pattern repeats every PERIOD squares in both directions (the classic
+# 15x15 pattern shares its outer rows/columns), so the board can grow forever and
+# new squares still get bonuses.  Python's modulo handles negative coordinates.
+PERIOD = 14
+
+
+def premium_at(row, col):
+    """"TW" | "DW" | "TL" | "DL" for any square on the (unbounded) board, or None."""
+    return PREMIUM.get((row % PERIOD, col % PERIOD))
+
+
 def letter_boost(row, col):
     """The letter multiplier a tile earns by landing on (row, col): 2, 3 or 1."""
-    return {"DL": 2, "TL": 3}.get(PREMIUM.get((row, col)), 1)
+    return {"DL": 2, "TL": 3}.get(premium_at(row, col), 1)
+
+
+def word_factor(word):
+    """The word multiplier earned by the new tiles of `word` (DW = 2, TW = 3, stacking)."""
+    factor = 1
+    for cell in word.cells:
+        if cell.new:
+            premium = premium_at(cell.row, cell.col)
+            if premium == "DW":
+                factor *= 2
+            elif premium == "TW":
+                factor *= 3
+    return factor
 
 
 @dataclass(frozen=True)
@@ -40,6 +64,7 @@ class MoveScore:
     total: int
     word_scores: tuple  # one score per word, in the same order as the words
     bingo: bool
+    bonus: int = 0  # what the bingo added on top of the word scores
 
 
 def score_word(word, lang="en"):
@@ -50,26 +75,28 @@ def score_word(word, lang="en"):
     placed on a letter premium).
     """
     letters = 0
-    word_multiplier = 1
     for cell in word.cells:
         value = 0 if cell.blank else tile_value(cell.letter, lang) * cell.boost
         if cell.new:
-            premium = PREMIUM.get((cell.row, cell.col))
+            premium = premium_at(cell.row, cell.col)
             if premium == "DL":
                 value *= 2
             elif premium == "TL":
                 value *= 3
-            elif premium == "DW":
-                word_multiplier *= 2
-            elif premium == "TW":
-                word_multiplier *= 3
         letters += value
-    return letters * word_multiplier
+    return letters * word_factor(word)
 
 
-def score_move(words, tiles_placed, lang="en"):
-    """Total score for a play: every word formed plus the 50-point bingo bonus."""
+def score_move(words, tiles_placed, lang="en", mode="classic"):
+    """Total score for a play: every word formed plus the bingo bonus.
+
+    Using all seven tiles is a bingo.  Classic scoring adds a flat 50 points.  Wild
+    scoring doubles the value of the main word (the first one) instead; the
+    perpendicular words are unaffected.
+    """
     word_scores = tuple(score_word(word, lang) for word in words)
     bingo = tiles_placed == RACK_SIZE
-    total = sum(word_scores) + (BINGO_BONUS if bingo else 0)
-    return MoveScore(total=total, word_scores=word_scores, bingo=bingo)
+    bonus = 0
+    if bingo:
+        bonus = word_scores[0] if mode == "wild" else BINGO_BONUS
+    return MoveScore(total=sum(word_scores) + bonus, word_scores=word_scores, bingo=bingo, bonus=bonus)

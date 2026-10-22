@@ -29,8 +29,8 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 from game.board import GameError
 from game.room import (
-    CONFIG, DEFAULT_MODE, LENGTHS, MODES, TIMERS, RoomRegistry, available_languages, check_expand_margin,
-    check_language, check_players, diff_views,
+    CONFIG, DEFAULT_LENGTH, DEFAULT_MODE, LENGTHS, MODES, TIMERS, RoomRegistry, available_languages, check_capacity,
+    check_expand_margin, check_language, check_players, diff_views, length_for_players,
 )
 
 log = logging.getLogger("scrabble")
@@ -80,8 +80,9 @@ def create_room():
     """Create a room and return its 8-character code and shareable URL.
 
     An optional JSON body may preselect the settings:
-    {"mode": "wild"|"classic", "length": "short"|"medium"|"full", "timer": "off"|"30s"|...}.
-    Anything left out uses the default (Wild, full, no timer). Either player can
+    {"mode": "wild"|"classic", "length": "short"|"medium"|"full", "timer": "off"|"30s"|...,
+    "max_players": 2-16}. A player count without a length picks the shortest length that fits.
+    Anything left out uses the default (Wild, medium, no timer). Either player can
     still change the settings inside the room until the first turn is played.
     """
     payload = request.get_json(silent=True)
@@ -110,6 +111,13 @@ def create_room():
         except GameError as exc:
             return jsonify(error=str(exc)), 400
         options["max_players"] = payload["max_players"]
+        if "length" not in options:  # no length chosen: use the shortest one that fits everybody's rack
+            options["length"] = length_for_players(payload["max_players"], DEFAULT_LENGTH)
+    if "max_players" in options or "length" in options:
+        try:
+            check_capacity(options.get("length", DEFAULT_LENGTH), options.get("max_players", 2))
+        except GameError as exc:  # the caller asked for an impossible combination
+            return jsonify(error=str(exc)), 400
     if payload.get("language") is not None:
         try:
             check_language(payload["language"])
@@ -119,6 +127,7 @@ def create_room():
     try:
         room = REGISTRY.create(**options)
     except GameError as exc:
+        # Settings were validated above, so what is left is the server being full.
         return jsonify(error=str(exc)), 503
     path = f"/join/{room.code}"
     return (
@@ -244,8 +253,7 @@ def on_join(data=None):
                 return {"ok": False, "code": "full", "error": str(exc)}
         # (Re)bind this socket to the player.  Dropping the old baseline forces
         # a fresh full snapshot, which is also how a client resynchronises.
-        player.sid = request.sid
-        player.connected = True
+        room.player_joined(player, request.sid)
         player.sent_view = None
         SESSIONS[request.sid] = (room.code, player.token)
         join_room(room.code)
@@ -268,8 +276,7 @@ def on_disconnect(*_args):
         # A refresh rebinds the player to a new socket before the old one
         # disconnects; only mark them offline if this socket is still theirs.
         if player is not None and player.sid == request.sid:
-            player.connected = False
-            player.sid = None
+            room.player_left(player)
             room.touch()
             push_all(room)
 
@@ -313,7 +320,7 @@ def game_action(event):
 @game_action("update_settings")
 def on_update_settings(room, player, data):
     """Change game settings: {"mode": "wild"|"classic", "length": "short"|"medium"|"full", "timer": "off"|"30s"|...,
-    "auto_expand": bool, "expand_margin": 1-10, "max_players": 2-4 (wild only, before the game starts),
+    "auto_expand": bool, "expand_margin": 1-10, "max_players": 2-16 (wild only, before the game starts),
     "language": "en"|"fi"|"fr"|"es"|"sv" (only those with a word list installed)}.
 
     Either player may do this, but only before the first turn has been played.
@@ -339,6 +346,15 @@ def on_update_settings(room, player, data):
 def on_start_game(room, player, data):
     """Host starts the game before the room is full (needs at least two players)."""
     room.start_now(player)
+
+
+@game_action("skip_player")
+def on_skip_player(room, player, data):
+    """Pass for a player who has been offline for a while: {"seat": n}."""
+    seat = data.get("seat")
+    if not isinstance(seat, int) or isinstance(seat, bool):
+        raise GameError("Choose a player to skip.")
+    return room.skip_player(player, seat)
 
 
 @game_action("place_tiles")
@@ -399,7 +415,6 @@ if __name__ == "__main__":
 # TODO: Accounts / auth instead of anonymous per-room session tokens.
 # TODO: In-game chat and emoji reactions.
 # TODO: AI opponent (anchor-square move generator over a DAWG/GADDAG).
-# TODO: 3-4 player rooms (turn order, per-player challenges, end-game scoring).
 # TODO: Swap in the full official dictionary (TWL/NWL or SOWPODS/Collins) and
 #       let the room creator choose it.
 # TODO: Automatic forfeits for abandoned games (turn timers already pass for you).

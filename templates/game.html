@@ -23,12 +23,16 @@
 
   <main class="layout">
     <section class="board-col">
-      <div id="board-scroll" class="board-scroll">
-        <div id="board" class="board" role="grid" aria-label="Scrabble board"></div>
+      <div class="board-wrap">
+        <div id="board-scroll" class="board-scroll">
+          <div id="board" class="board" role="grid" aria-label="Scrabble board"></div>
+        </div>
+        <canvas id="minimap" class="minimap" width="132" height="96" hidden aria-label="Board overview: tap to jump"></canvas>
       </div>
 
       <div class="swap-row">
         <button id="btn-swap" class="btn" type="button" disabled>Swap&hellip;</button>
+        <button id="btn-shuffle" class="btn" type="button" title="Shuffle the order of your rack (only you see it)">Shuffle rack</button>
         <button id="btn-zoom" class="btn zoom-btn" type="button" aria-pressed="false">Zoom board</button>
       </div>
       <div id="rack" class="rack" aria-label="Your tile rack"></div>
@@ -53,11 +57,12 @@
       <div class="bag">Tiles in bag: <b id="bag-count">&ndash;</b></div>
 
       <div id="share" class="share" hidden>
-        <p>Waiting for your opponent. Send them this link:</p>
+        <p>Waiting for players. Send them this link:</p>
         <div class="row">
           <input id="share-url" type="text" readonly aria-label="Shareable link">
           <button id="share-copy" class="btn" type="button">Copy</button>
         </div>
+        <button id="btn-start" class="btn btn-primary btn-wide" type="button" hidden style="margin-top: 8px">Start now</button>
       </div>
 
       <div class="history-wrap">

@@ -1,0 +1,57 @@
+Letter League contains examples of the following tropes:
+
+    Adaptation Deviation:
+        By default, the game is in Wild Mode, in which individual letters affected by bonus multipliers are affected permanently (though any subsequently placed letters either extending or intersecting with the bonified word will not be affected). In Classic Mode, meanwhile, bonuses only apply on the turn in which they are first claimed, and any subsequent plays involving those letters will only be scored according to the letters' base values. This latter mode is identical to how standard Scrabble functions.
+        Bingos are scored differently in Letter League; the "main word" of the bingo is doubled in value, while the perpendicular words are unaffected. In Scrabble, meanwhile, the bingo bonus is exactly 50 points no matter what.
+        The letter L is worth two points instead of one.
+        The tile bag for "medium" length games contains mostly the same letter distribution as Scrabble, with the exception that the sixth N has been swapped out for a second K.
+    Adaptation Distillation: For "short" games, which is the default length option, the tile bag only contains around 50 tiles in the case of a single player. This number increases if there are more players, but is still considerably less than the 100 tiles in the original Scrabble. Additionally, the exact tile set is randomized, and a few of the rarer letters (J, K, Q, X, and/or Z) may be absent from the bag entirely.
+    Adaptation Expansion: The board starts out with a size of 27x19, compared to 15x15 in the original Scrabble. Furthermore, it continues to expand as more words are added in that direction, so the true size of the board is only limited by the total size of the tile bag.
+    Alliterative Title: Letter League.
+    Animate Inanimate Object: There's a moving and talking tile bag which, among other things, informs the player whether their move is valid and why, and how many points each play is worth.
+    Colour-Coded for Your Convenience: Besides the bonus spaces themselves being color-coded according to their values, in Wild Mode, words affected by them will also be colored in accordingly, to indicate that they will continue to have those bonuses.
+    Developer's Foresight: Given the increased board size, the game's dictionary does contain at least a few words which would be too long to play on a standard Scrabble board and thus would not normally be included. A few examples that the game allows are the 17-letter "extraterrestrials" and the 21-letter "compartmentalizations".note 
+    Easter Egg: There's a special message for scoring zero points with a standard play, in which case the message will read "0 points? 0 points!" instead of something like "Nice!". This is a fairly contrived scenario, as it requires constructing a 2-letter (or longer) word entirely out of blank tiles.
+    Interactive Start Up: The title screen contains a set of tiles arranged to spell "LETTER LEAGUE". Players can move these around while waiting for the game to start.
+    Timed Mission: Downplayed with the turn timer, which is for the most part cosmetic. Although it ticks down from 60 seconds, any player can pause or resume it at will, regardless of whether it's their turn. Once the timer reaches 0, an annoying sound effect begins to play reminding the player to make a move, but this too can be disabled by pausing the timer. At this point, the game host can choose to skip the player's turn, but other than that there is no inherent penalty for going overtime. If even this is too much, there's also an option in the settings to disable the timer entirely.
+
+# Each cell is a string representing the premium square type:
+#   ""  = normal square
+#   "2L" = Double Letter (DL)
+#   "3L" = Triple Letter (TL)
+#   "2W" = Double Word (DW)
+#   "3W" = Triple Word (TW)
+#   "★"  = center star (also a 2W Double Word square)
+
+WILD_SCRABBLE_BOARD = [
+    # Row 0
+    ["",   "",   "",   "2L", "",   "",   "",   "3L", "",   "",   "",   "2L", "",   "",   ""],
+    # Row 1
+    ["",   "2W", "",   "",   "",   "3L", "",   "",   "",   "3L", "",   "",   "",   "2W", ""],
+    # Row 2
+    ["",   "",   "2W", "",   "",   "",   "2L", "",   "2L", "",   "",   "",   "2W", "",   ""],
+    # Row 3
+    ["2L", "",   "",   "2W", "",   "",   "",   "2L", "",   "",   "",   "2W", "",   "",   "2L"],
+    # Row 4
+    ["",   "",   "",   "",   "2W", "",   "",   "",   "",   "",   "2W", "",   "",   "",   ""],
+    # Row 5
+    ["",   "3L", "",   "",   "",   "3L", "",   "",   "",   "3L", "",   "",   "",   "3L", ""],
+    # Row 6
+    ["",   "",   "2L", "",   "",   "",   "2L", "",   "2L", "",   "",   "",   "2L", "",   ""],
+    # Row 7
+    ["3L", "",   "",   "2L", "",   "",   "",   "★",  "",   "",   "",   "2L", "",   "",   "3L"],
+    # Row 8
+    ["",   "",   "2L", "",   "",   "",   "2L", "",   "2L", "",   "",   "",   "2L", "",   ""],
+    # Row 9
+    ["",   "3L", "",   "",   "",   "3L", "",   "",   "",   "3L", "",   "",   "",   "3L", ""],
+    # Row 10
+    ["",   "",   "",   "",   "2W", "",   "",   "",   "",   "",   "2W", "",   "",   "",   ""],
+    # Row 11
+    ["2L", "",   "",   "2W", "",   "",   "",   "2L", "",   "",   "",   "2W", "",   "",   "2L"],
+    # Row 12
+    ["",   "",   "2W", "",   "",   "",   "2L", "",   "2L", "",   "",   "",   "2W", "",   ""],
+    # Row 13
+    ["",   "2W", "",   "",   "",   "3L", "",   "",   "",   "3L", "",   "",   "",   "2W", ""],
+    # Row 14
+    ["",   "",   "",   "2L", "",   "",   "",   "3L", "",   "",   "",   "2L", "",   "",   ""],
+]

@@ -7,8 +7,23 @@ words are in the dictionary, and what they score, is decided elsewhere.
 from collections import namedtuple
 from dataclasses import dataclass
 
-BOARD_SIZE = 15
+BOARD_SIZE = 15  # the classic grid the premium-square pattern is drawn on
+# The playing area starts as 27 columns x 19 rows around the centre star and grows
+# as tiles get close to an edge (see Board.expand_to_margin).
+BOARD_ROWS, BOARD_COLS = 19, 27
 CENTER = (7, 7)
+
+
+def initial_bounds():
+    """Playing area of a fresh board: {"top", "bottom", "left", "right"} (inclusive)."""
+    top = CENTER[0] - (BOARD_ROWS - 1) // 2
+    left = CENTER[1] - (BOARD_COLS - 1) // 2
+    return {"top": top, "bottom": top + BOARD_ROWS - 1, "left": left, "right": left + BOARD_COLS - 1}
+
+
+def classic_bounds():
+    """The standard 15x15 Scrabble grid."""
+    return {"top": 0, "bottom": BOARD_SIZE - 1, "left": 0, "right": BOARD_SIZE - 1}
 
 
 class GameError(Exception):
@@ -44,13 +59,15 @@ class Word:
 
 
 class Board:
-    def __init__(self):
+    def __init__(self, classic=False):
         # Sparse grid: (row, col) -> Tile.  Coordinates never shift; the
-        # playable area is the rectangle below, which may grow past 0..14
-        # (negative coordinates are valid) when auto-expansion is on.
+        # playable area is the rectangle below, which starts as 27x19 and grows
+        # in any direction (negative coordinates are valid) when auto-expansion is on.
         self.grid = {}
-        self.top, self.left = 0, 0
-        self.bottom, self.right = BOARD_SIZE - 1, BOARD_SIZE - 1
+        # Classic is the standard 15x15 Scrabble grid; Wild starts 27x19 and grows.
+        start = self._start = classic_bounds() if classic else initial_bounds()
+        self.top, self.left = start["top"], start["left"]
+        self.bottom, self.right = start["bottom"], start["right"]
 
     @property
     def tile_count(self):
@@ -73,8 +90,8 @@ class Board:
         """Make sure at least `margin` empty rings surround every placed tile.
 
         A side only grows when a tile is within `margin` rings of it, and it
-        grows exactly far enough to restore the margin.  The board never
-        shrinks.  Returns True if any side grew.
+        grows exactly far enough to restore the margin.  It only shrinks again
+        through shrink_to_margin (a successful challenge).  Returns True if any side grew.
         """
         if not self.grid:
             return False
@@ -90,6 +107,24 @@ class Board:
         self.top, self.left, self.bottom, self.right = new
         return changed
 
+    def shrink_to_margin(self, margin):
+        """Undo growth that is no longer needed (after tiles were taken back).
+
+        The area is the starting rectangle plus `margin` rings around the remaining
+        tiles - exactly what expand_to_margin would have built from scratch.
+        Returns True if any side shrank.
+        """
+        start = self._start
+        top, left, bottom, right = start["top"], start["left"], start["bottom"], start["right"]
+        if self.grid:
+            rows = [r for r, _ in self.grid]
+            cols = [c for _, c in self.grid]
+            top, left = min(top, min(rows) - margin), min(left, min(cols) - margin)
+            bottom, right = max(bottom, max(rows) + margin), max(right, max(cols) + margin)
+        changed = (top, left, bottom, right) != (self.top, self.left, self.bottom, self.right)
+        self.top, self.left, self.bottom, self.right = top, left, bottom, right
+        return changed
+
     def place_all(self, placements, boosts=None):
         """Put tiles on the board. `boosts` maps (row, col) -> permanent letter multiplier."""
         boosts = boosts or {}
@@ -97,6 +132,13 @@ class Board:
             if (p.row, p.col) in self.grid:
                 raise GameError("That square is already taken.")
             self.grid[(p.row, p.col)] = Tile(p.letter, p.blank, boosts.get((p.row, p.col), 1))
+
+    def multiply_boosts(self, factors):
+        """Multiply the permanent boost of tiles already on the board: {(row, col): factor}."""
+        for key, factor in factors.items():
+            tile = self.grid.get(key)
+            if tile is not None and factor != 1:
+                self.grid[key] = tile._replace(boost=tile.boost * factor)
 
     def remove_all(self, placements):
         """Take tiles back off the board (used when a challenge succeeds)."""

@@ -41,6 +41,10 @@
   const LAST_KEY = 'scrabble.last';
   const NAME_KEY = 'scrabble.name';
   const ZOOM_KEY = 'scrabble.zoom';
+  const ZOOM_CELL_KEY = 'scrabble.zoomcell';
+  const RACK_KEY = (room) => `scrabble.rack.${room}`;
+  // Every seat gets its own hue (golden-angle spacing keeps neighbours apart even with 16 players).
+  const seatHue = (seat) => Math.round((seat * 137.508 + 275) % 360);
 
   function loadSession(room) {
     try {
@@ -66,6 +70,8 @@
   function initIndex() {
     const createBtn = $('create-btn');
     const createError = $('create-error');
+    const playersSel = $('create-players');
+    for (let n = 2; n <= 16; n += 1) playersSel.append(h('option', { value: String(n), text: n === 2 ? '2 players' : `${n} players (Wild)` }));
 
     createBtn.addEventListener('click', async () => {
       createBtn.disabled = true;
@@ -74,7 +80,8 @@
         const res = await fetch('/create', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: '{}',
+          // More than two players only works in Wild (the default); the server picks a bag that fits.
+          body: JSON.stringify(Number(playersSel.value) > 2 ? { max_players: Number(playersSel.value) } : {}),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || 'Could not create a game.');
@@ -126,7 +133,6 @@
   // ------------------------------------------------------------------
   function initGame() {
     const roomCode = document.body.dataset.room;
-    const BOARD_SIZE = 15;
     const ACK_TIMEOUT = 8000;
 
     let socket = null;
@@ -142,7 +148,15 @@
     // (S.pending) wins whenever no request is in flight.
     // `selected` is a rack tile picked for tap-to-place; `selectedBoard` is a tentative tile
     // on the board picked up for moving (touch screens: a tap selects, it never removes).
-    const local = { pending: [], selected: null, selectedBoard: null, inflight: 0 };
+    // `rackOrder` is my private, purely visual ordering of the rack (a list of letters). Server
+    // rack indices never change; rackIndices() maps this order onto them.
+    const local = { pending: [], selected: null, selectedBoard: null, inflight: 0, rackOrder: [] };
+    // The arrangement survives reloads (per room, this browser only).
+    try {
+      const saved = JSON.parse(store.get(RACK_KEY(roomCode)) || '[]');
+      if (Array.isArray(saved)) local.rackOrder = saved.filter((x) => typeof x === 'string' && x.length === 1).slice(0, 32);
+    } catch (_) { local.rackOrder = []; }
+    const saveRackOrder = () => store.set(RACK_KEY(roomCode), JSON.stringify(local.rackOrder));
 
     const els = {
       board: $('board'), rack: $('rack'), preview: $('preview'), banner: $('turn-banner'),
@@ -151,19 +165,21 @@
       submit: $('btn-submit'), recall: $('btn-recall'), swap: $('btn-swap'),
       pass: $('btn-pass'), challenge: $('btn-challenge'), modeLabel: $('mode-label'),
       settingsBtn: $('btn-settings'), info: $('btn-info'), timer: $('timer'),
-      boardScroll: $('board-scroll'), zoom: $('btn-zoom'),
+      boardScroll: $('board-scroll'), zoom: $('btn-zoom'), start: $('btn-start'),
+      shuffle: $('btn-shuffle'), minimap: $('minimap'),
     };
-    let cells = [];          // cells[row][col] -> element
+    let cells = new Map();   // "row,col" -> element (absolute board coordinates, may be negative)
+    let builtBounds = null;  // bounds the current DOM grid was built for
 
     // Display text for the game settings (the server owns the actual rules).
     const MODE_INFO = {
       wild: {
         label: 'Wild',
-        help: 'Words are checked automatically. A tile placed on a double or triple letter square keeps that bonus for the rest of the game.',
+        help: 'Words are checked automatically. Letters hit by a bonus keep it for the rest of the game (letters added to them later are not multiplied). A bingo doubles the main word.',
       },
       classic: {
         label: 'Classic',
-        help: 'Traditional scoring: premium squares only count when the tile is placed. Any play is accepted and your opponent may challenge it.',
+        help: 'Traditional scoring: premium squares only count on the turn they are covered and a bingo is a flat 50. Any play is accepted and your opponent may challenge it (two players).',
       },
     };
     const LANGUAGE_NAME = { en: 'English', fi: 'Suomi', fr: 'Français', es: 'Español', sv: 'Svenska' };
@@ -174,7 +190,13 @@
       return secs < 120 ? `${secs} seconds per turn` : `${secs / 60} minutes per turn`;
     };
     const timerShort = (key) => (key && key !== 'off' ? ` · ${key} turns` : '');
-    const letterMult = (row, col) => ({ DL: 2, TL: 3 }[config.premiums[`${row},${col}`]] || 1);
+    // The premium pattern repeats every `premium_period` squares, so the board can grow forever.
+    const mod = (n, m) => ((n % m) + m) % m;
+    const premiumAt = (row, col) => {
+      const period = config.premium_period || 14;
+      return config.premiums[`${mod(row, period)},${mod(col, period)}`];
+    };
+    const letterMult = (row, col) => ({ DL: 2, TL: 3 }[premiumAt(row, col)] || 1);
     let deadlineAt = null;   // local time (ms) at which the current turn's clock runs out
     const modeLabel = (mode) => (MODE_INFO[mode] ? MODE_INFO[mode].label : mode);
     const lengthText = (length) => {
@@ -296,7 +318,8 @@
       showModal((modal, api) => {
         const rackEl = h('div', { class: 'swap-rack' });
         const confirm = h('button', { class: 'btn btn-primary', type: 'button', text: 'Swap 0 tiles', disabled: true });
-        S.rack.forEach((letter, index) => {
+        rackIndices().forEach((index) => {
+          const letter = S.rack[index];
           const tile = makeTile(letter === '?' ? '' : letter, letter === '?');
           if (letter === '?') tile.querySelector('.l').textContent = '␣';
           tile.setAttribute('role', 'button');
@@ -354,14 +377,22 @@
     }
 
     // ---------- board construction ----------
+    const boundsOf = () => (S && S.bounds) || config.bounds;
+    const boundsChanged = (a, b) => !a || a.top !== b.top || a.bottom !== b.bottom || a.left !== b.left || a.right !== b.right;
+
+    // (Re)build the grid for the current bounds. The server grows the board as tiles get
+    // near an edge, so this runs again whenever S.bounds changes.
     function buildBoard() {
+      const b = boundsOf();
+      const prev = builtBounds;
       els.board.replaceChildren();
-      cells = [];
+      cells = new Map();
+      els.board.style.setProperty('--cols', String(b.right - b.left + 1));
+      els.board.style.setProperty('--rows', String(b.bottom - b.top + 1));
       const [centerRow, centerCol] = config.center;
-      for (let r = 0; r < BOARD_SIZE; r += 1) {
-        const row = [];
-        for (let c = 0; c < BOARD_SIZE; c += 1) {
-          const kind = config.premiums[`${r},${c}`];
+      for (let r = b.top; r <= b.bottom; r += 1) {
+        for (let c = b.left; c <= b.right; c += 1) {
+          const kind = premiumAt(r, c);
           const isCenter = r === centerRow && c === centerCol;
           const cell = h('div', {
             class: `cell${kind ? ` ${kind.toLowerCase()}` : ''}${isCenter ? ' center' : ''}`,
@@ -371,9 +402,16 @@
           cell.dataset.label = isCenter ? '★' : (kind || '');
           cell.dataset.sig = '';
           els.board.append(cell);
-          row.push(cell);
+          cells.set(`${r},${c}`, cell);
         }
-        cells.push(row);
+      }
+      builtBounds = { ...b };
+      if (prev) {
+        // Growing at the top/left shifts everything down/right: keep the same squares in view.
+        const sample = els.board.firstElementChild;
+        const step = sample ? sample.offsetWidth + 3 : 0;
+        els.boardScroll.scrollLeft += (prev.left - b.left) * step;
+        els.boardScroll.scrollTop += (prev.top - b.top) * step;
       }
     }
 
@@ -385,18 +423,21 @@
       const mult = !blank && boost > 1 ? boost : 1;
       if (!blank) children.push(h('span', { class: 'v', text: String(tileValue(letter) * mult) }));
       const tinted = mult > 1 && tint;
-      const cls = `tile${blank ? ' blank' : ''}${tinted ? ` boosted boost-${mult}` : ''}${extra ? ` ${extra}` : ''}`;
+      const boostClass = mult >= 4 ? 'boost-hi' : `boost-${mult}`;
+      const cls = `tile${blank ? ' blank' : ''}${tinted ? ` boosted ${boostClass}` : ''}${extra ? ` ${extra}` : ''}`;
+      if (tinted && mult >= 4) children.push(h('span', { class: 'm', text: `x${mult}` }));
       const tile = h('div', { class: cls }, children);
-      if (tinted) tile.setAttribute('title', `Worth ${tileValue(letter) * mult} (x${mult} letter bonus)`);
+      if (tinted) tile.setAttribute('title', `Worth ${tileValue(letter) * mult} (x${mult} bonus kept)`);
       return tile;
     }
 
     // ---------- rendering ----------
     function render() {
       if (!S || !config) return;
-      if (!cells.length) {
+      if (boundsChanged(builtBounds, boundsOf())) {
+        const first = !builtBounds;
         buildBoard();
-        if (els.boardScroll.classList.contains('zoomed')) centerBoardOn(cells[config.center[0]][config.center[1]]);
+        if (first && els.boardScroll.classList.contains('zoomed')) centerBoardOn(cells.get(`${config.center[0]},${config.center[1]}`));
       }
       // A picked-up board tile only stays selected while it is still mine to move.
       if (local.selectedBoard && !(canPlace() && local.pending.some(
@@ -415,9 +456,13 @@
       renderTimer();
       els.modeLabel.textContent = `${modeLabel(S.mode)} · ${lengthText(S.length)}${timerShort(S.timer)}`;
       els.share.hidden = S.status !== 'waiting';
+      els.start.hidden = !S.can_start;
+      els.start.textContent = `Start now with ${S.players.length} players`;
+      els.start.disabled = busy;
       if (S.status === 'waiting') els.shareUrl.value = `${window.location.origin}/join/${roomCode}`;
       document.title = `${myTurn() ? '▶ ' : ''}Scrabble – ${roomCode}`;
       showGameOver();
+      queueMinimap();
     }
 
     function renderSettingsButton() {
@@ -438,14 +483,43 @@
         const languages = config.languages || [config.default_language];
         const languageSel = h('select', { 'aria-label': 'Language' },
           languages.map((l) => option(l, LANGUAGE_NAME[l] || l)));
+        const range = config.player_range || [2, 4];
+        const playersSel = h('select', { 'aria-label': 'Players' });
+        for (let n = range[0]; n <= range[1]; n += 1) {
+          playersSel.append(option(String(n), `${n} players`));
+        }
+        playersSel.value = String(S.max_players || 2);
+        const rack = config.rack_size || 7;
+        const fits = (length, players) => players * rack <= config.lengths[length];
+        // Lengths whose bag cannot give every player a full rack are greyed out; picking a bigger
+        // player count raises the length to the shortest one that fits (the server does the same).
+        const syncLengths = () => {
+          const players = Number(playersSel.value);
+          for (const opt of lengthSel.options) {
+            opt.disabled = !fits(opt.value, players);
+            opt.title = opt.disabled ? `Not enough tiles for ${players} players` : '';
+          }
+          if (!fits(lengthSel.value, players)) {
+            const ordered = Object.keys(config.lengths).sort((a, b) => config.lengths[a] - config.lengths[b]);
+            lengthSel.value = ordered.find((l) => fits(l, players)) || ordered[ordered.length - 1];
+          }
+        };
+        const syncPlayers = () => {
+          // Classic uses challenges, which only work one-on-one.
+          if (modeSel.value === 'classic') playersSel.value = '2';
+          playersSel.disabled = modeSel.value === 'classic';
+          syncLengths();
+        };
+        playersSel.addEventListener('change', syncLengths);
         languageSel.value = S.language;
         modeSel.value = S.mode;
         lengthSel.value = S.length;
         timerSel.value = S.timer;
         const help = h('p', { class: 'hint' });
         const showHelp = () => { help.textContent = (MODE_INFO[modeSel.value] || {}).help || ''; };
-        modeSel.addEventListener('change', showHelp);
+        modeSel.addEventListener('change', () => { showHelp(); syncPlayers(); });
         showHelp();
+        if (S.status === 'waiting') syncPlayers(); else syncLengths();
         const field = (label, el) => h('label', { class: 'field' }, h('span', { text: label }), el);
         const save = () => {
           const change = {};
@@ -453,13 +527,17 @@
           if (lengthSel.value !== S.length) change.length = lengthSel.value;
           if (timerSel.value !== S.timer) change.timer = timerSel.value;
           if (languageSel.value !== S.language) change.language = languageSel.value;
+          if (S.status === 'waiting' && Number(playersSel.value) !== (S.max_players || 2)) {
+            change.max_players = Number(playersSel.value);
+          }
           api.close();
           if (Object.keys(change).length) act('update_settings', change, () => toast('Game settings updated.'));
         };
         modal.append(
           h('h2', { text: 'Game Settings' }),
-          h('p', { text: 'Either player can change these until the first turn is played.' }),
+          h('p', { text: 'Anyone in the room can change these until the first turn is played.' }),
           field('Scoring', modeSel), help,
+          ...(S.status === 'waiting' ? [field('Players', playersSel)] : []),
           field('Length', lengthSel),
           field('Timer', timerSel),
           ...(languages.length > 1 ? [field('Language', languageSel)] : []),
@@ -476,16 +554,17 @@
         modal.classList.add('modal-info');
         modal.append(
           h('h2', { text: 'Game Info' }),
-          h('p', { text: 'Players take turns placing letters on a shared board to make words, crossword-style. High-value letters and special squares earn more points.' }),
+          h('p', { text: '2 to 16 players take turns placing letters on a shared board to make words, crossword-style. In Wild the board starts at 27 by 19 squares and keeps growing as words reach its edges; Classic uses the standard fixed 15 by 15 board. High-value letters and special squares earn more points.' }),
           h('h3', { text: 'Setup' }),
           h('p', { text: 'Open Edit Game Settings to choose the length, scoring and timer for your game (before the first turn).' }),
           h('ul', {},
-            bullet('Wild (default): ', 'when a letter is multiplied, it keeps its improved score. Multiplied letters are coloured in, so they can be reused by anyone later. Wild mode checks words automatically and tells you whether a word is valid as you place tiles.'),
-            bullet('Classic: ', 'each letter has a point value in its lower right. When you play a word, you score all the letters used. Put letters on multiplier squares for higher scores. Classic uses the traditional challenge system.')),
+            bullet('Wild (default): ', 'letters affected by a bonus keep it permanently: a letter on a double/triple letter square, and every letter of a word that hit a double/triple word square. Multiplied letters are coloured in and keep their higher value when anyone reuses them, but letters added to the word later are not multiplied. A bingo (all 7 tiles) doubles the main word. Words are checked automatically as you place tiles. Up to 16 players (a longer game gives everyone a full rack).'),
+            bullet('Classic: ', 'bonuses only count on the turn they are covered, and a bingo is a flat 50 points, as in standard Scrabble. Classic uses the traditional challenge system and is for two players.')),
           h('h3', { text: 'How to play' }),
           h('ol', {},
             h('li', { text: 'Place letters: use the tiles near the bottom to make words. Select a tile and then its destination, or drag it there. The number on each tile is what that letter scores on the square it is on.' }),
             h('li', { text: 'Plan ahead: while your opponent is playing you can already stage a word. It is checked and scored live, only you can see it, and it loads onto the board when your turn starts so you can review it and press Play word.' }),
+            h('li', { text: 'Rearrange your rack by dragging tiles left or right. Only you see your rack and the tiles you have placed but not yet played.' }),
             h('li', { text: "Can't form a word? Swap tiles with the Swap button above your letters, or press Pass Turn under the timer." }),
             h('li', { text: 'Winning: the player with the most points at the end of the game wins.' })),
           h('div', { class: 'actions' }, h('button', { class: 'btn btn-primary', type: 'button', text: 'Got it', onclick: () => api.close() })),
@@ -516,7 +595,7 @@
       let cls;
       const opp = opponent();
       if (S.status === 'waiting') {
-        text = 'Waiting for your opponent to join…';
+        text = `Waiting for players to join… (${S.players.length}/${S.max_players || 2})`;
         cls = 'theirs';
       } else if (S.status === 'finished') {
         text = S.winner === 'tie' ? "Game over – it's a tie!"
@@ -533,7 +612,10 @@
         if (canStage()) text += ' · stage your next word';
         cls = 'theirs';
       }
-      if (S.status === 'playing' && opp && !opp.connected) text += ' — opponent is offline';
+      const offline = S.players.filter((p) => p.seat !== S.you && !p.connected);
+      if (S.status === 'playing' && offline.length) {
+        text += offline.length === 1 ? ` — ${offline[0].name} is offline` : ' — some players are offline';
+      }
       els.banner.textContent = text;
       els.banner.className = `turn-banner ${cls}`;
     }
@@ -541,7 +623,7 @@
     function renderBoard() {
       const lastCells = new Set((S.last_move ? S.last_move.cells : []).map(([r, c]) => `${r},${c}`));
       const mine = new Map();   // my tentative tiles (my turn) or my staged tiles (off turn)
-      const theirs = new Map(); // opponent's tentative tiles, shown as ghosts
+      // Unplayed tiles are private: the opponent's tentative tiles are never drawn.
       const staging = !canEdit() && canStage();
       if (canEdit() || staging) {
         for (const p of local.pending) {
@@ -549,17 +631,13 @@
           mine.set(`${p.row},${p.col}`, { letter: p.letter, blank: isBlank, boost: letterMult(p.row, p.col) });
         }
       }
-      // A staged tile of mine wins a square the opponent is only hovering over (checked first below).
-      if (!canEdit() && isPlaying()) {
-        for (const p of S.pending) theirs.set(`${p.row},${p.col}`, { letter: p.letter, blank: p.blank, boost: letterMult(p.row, p.col) });
-      }
 
       const placing = canPlace() && (local.selected !== null || local.selectedBoard !== null);
       const sb = local.selectedBoard;
-      for (let r = 0; r < BOARD_SIZE; r += 1) {
-        for (let c = 0; c < BOARD_SIZE; c += 1) {
+      for (let r = builtBounds.top; r <= builtBounds.bottom; r += 1) {
+        for (let c = builtBounds.left; c <= builtBounds.right; c += 1) {
           const key = `${r},${c}`;
-          const cell = cells[r][c];
+          const cell = cells.get(key);
           const placed = S.board[key];
           let sig;
           let kind = null;
@@ -574,10 +652,6 @@
             info = mine.get(key);
             sel = !!sb && sb.row === r && sb.col === c;
             sig = `p${staging ? 's' : ''}:${S.mode}:${info.letter}:${info.blank ? 1 : 0}:${info.boost}:${sel ? 1 : 0}`;
-          } else if (theirs.has(key)) {
-            kind = 'ghost';
-            info = theirs.get(key);
-            sig = `g:${S.mode}:${info.letter}:${info.blank ? 1 : 0}:${info.boost}`;
           } else {
             sig = 'e';
           }
@@ -599,6 +673,41 @@
       }
     }
 
+    // Server rack indices in my preferred display order. Letters keep their position across
+    // turns; tiles I have not arranged yet (newly drawn) go at the end.
+    function rackIndices() {
+      const free = S.rack.map((_, i) => i);
+      const order = [];
+      for (const letter of local.rackOrder) {
+        const at = free.findIndex((i) => S.rack[i] === letter);
+        if (at !== -1) order.push(free.splice(at, 1)[0]);
+      }
+      order.push(...free);
+      const next = order.map((i) => S.rack[i]);
+      if (next.join('') !== local.rackOrder.join('')) { local.rackOrder = next; saveRackOrder(); }
+      return order;
+    }
+
+    // Drop a rack tile at horizontal position x: it lands before the first visible tile whose centre is right of x.
+    function reorderRack(index, x) {
+      const placeable = canPlace();
+      const used = new Set(local.pending.map((p) => p.rack_index));
+      const order = rackIndices().filter((i) => i !== index);
+      const visible = order.filter((i) => !(placeable && used.has(i)));
+      let before = null;
+      for (const i of visible) {
+        const tile = els.rack.querySelector(`.tile[data-index="${i}"]`);
+        if (!tile) continue;
+        const box = tile.getBoundingClientRect();
+        if (x < box.left + box.width / 2) { before = i; break; }
+      }
+      const at = before === null ? order.length : order.indexOf(before);
+      order.splice(at, 0, index);
+      local.rackOrder = order.map((i) => S.rack[i]);
+      saveRackOrder();
+      render();
+    }
+
     function renderRack() {
       const used = new Set(local.pending.map((p) => p.rack_index));
       const placeable = canPlace();
@@ -607,7 +716,8 @@
         els.rack.append(h('span', { class: 'rack-hint', text: 'Your rack appears when the game starts.' }));
         return;
       }
-      S.rack.forEach((letter, index) => {
+      rackIndices().forEach((index) => {
+        const letter = S.rack[index];
         if (placeable && used.has(index)) return;
         const blank = letter === '?';
         const tile = makeTile(blank ? '' : letter, blank, local.selected === index && placeable ? 'selected' : '');
@@ -624,21 +734,33 @@
 
     function renderPlayers() {
       els.players.replaceChildren();
+      const total = Math.max(S.players.length, S.max_players || 2);
+      els.players.classList.toggle('many', total > 4);  // compact two-column cards for big games
       for (const p of S.players) {
         const active = S.status === 'playing' && S.current === p.seat;
         const minis = h('span', { class: 'mini-tiles' });
         for (let i = 0; i < p.rack_count; i += 1) minis.append(h('i'));
-        els.players.append(h('div', { class: `player-card${active ? ' active' : ''}` },
+        const card = h('div', { class: `player-card${active ? ' active' : ''}` },
           h('div', { class: 'name' },
             h('span', { class: `dot${p.connected ? ' on' : ''}`, title: p.connected ? 'Online' : 'Offline' }),
             h('span', { class: 'nm', text: p.name }),
             p.seat === S.you ? h('span', { class: 'you', text: 'you' }) : null),
           h('div', { class: 'score', text: String(p.score) }),
-          h('div', { class: 'racks' }, minis, `${p.rack_count} tile${p.rack_count === 1 ? '' : 's'}`)));
+          h('div', { class: 'racks' }, minis, `${p.rack_count} tile${p.rack_count === 1 ? '' : 's'}`));
+        card.style.setProperty('--seat-hue', String(seatHue(p.seat)));
+        if (S.skippable === p.seat) {
+          // Offline for a while and holding everybody up: anyone else may pass for them.
+          card.append(h('button', {
+            class: 'btn btn-skip', type: 'button', text: 'Skip (offline)',
+            title: `${p.name} has been offline for a while. Pass for them so the game can go on.`,
+            onclick: () => act('skip_player', { seat: p.seat }, () => toast(`${p.name} was skipped.`)),
+          }));
+        }
+        els.players.append(card);
       }
-      if (S.players.length < 2) {
-        els.players.append(h('div', { class: 'player-card' },
-          h('div', { class: 'name' }, h('span', { class: 'dot' }), h('span', { class: 'nm', text: 'Waiting for opponent…' })),
+      for (let i = S.players.length; i < (S.max_players || 2); i += 1) {
+        els.players.append(h('div', { class: 'player-card waiting' },
+          h('div', { class: 'name' }, h('span', { class: 'dot' }), h('span', { class: 'nm', text: 'Waiting for player…' })),
           h('div', { class: 'score', text: '–' })));
       }
     }
@@ -646,8 +768,10 @@
     function renderHistory() {
       els.history.replaceChildren();
       for (const entry of [...S.history].reverse()) {
-        const seatClass = entry.seat === 0 || entry.seat === 1 ? ` s${entry.seat}` : '';
-        els.history.append(h('li', { class: `${entry.kind}${seatClass}`, text: entry.text }));
+        const seated = Number.isInteger(entry.seat) && entry.seat >= 0;
+        const li = h('li', { class: `${entry.kind}${seated ? ' seat' : ''}`, text: entry.text });
+        if (seated) li.style.setProperty('--seat-hue', String(seatHue(entry.seat)));
+        els.history.append(li);
       }
     }
 
@@ -699,7 +823,7 @@
         const mark = w.valid === true ? '✓ ' : (w.valid === false ? '✗ ' : '');
         parts.push(h('span', { class: w.valid === false ? 'pv-bad' : (w.valid === true ? 'pv-good' : ''), text: `${mark}${w.word} ${w.score}` }));
       });
-      if (pv.bingo) parts.push(h('span', { class: 'pv-total', text: ` BINGO +${config.bingo_bonus}` }));
+      if (pv.bingo) parts.push(h('span', { class: 'pv-total', text: ` BINGO +${pv.bingo_bonus !== undefined ? pv.bingo_bonus : config.bingo_bonus}` }));
       if (pv.total !== null && pv.total !== undefined) parts.push(h('span', { class: 'pv-total', text: ` = ${pv.total}` }));
       box.append(...parts);
       if (pv.error) box.append(h('div', { class: 'pv-bad', text: pv.error }));
@@ -715,6 +839,7 @@
       els.submit.title = staging && hasPending ? 'Your staged word loads on your turn; then press Play word.' : '';
       els.recall.disabled = !((edit || staging) && hasPending);
       els.swap.disabled = !(edit && S.bag_count >= config.rack_size && !busy);
+      els.shuffle.disabled = S.status === 'waiting' || S.rack.length < 2;
       els.swap.title = S.bag_count < config.rack_size ? 'Fewer than 7 tiles left in the bag' : '';
       els.pass.disabled = !(myTurn() && !busy);
       els.pass.textContent = S.awaiting_final ? 'Accept & end game' : 'Pass Turn';
@@ -826,7 +951,7 @@
             fatalModal('Game not found', 'This room no longer exists. The server may have restarted, or the game expired.');
           } else if (res && res.code === 'full') {
             socket.disconnect();
-            fatalModal('Room is full', 'Two players are already in this game.');
+            fatalModal('Room is full', 'This game already has all of its players.');
           } else {
             toast((res && res.error) || 'Could not join the game.', true);
           }
@@ -916,6 +1041,17 @@
       return null;
     }
 
+    // Where a drag currently points. On touch the tile is held above the finger, so a rack drop
+    // (reordering, or returning a tile) is also recognised when the finger itself is over the rack.
+    function resolveTarget(x, y) {
+      let target = targetAt(x, aimY(y));
+      if (!target || target.type === 'rack') {
+        const raw = targetAt(x, y);
+        if (raw && raw.type === 'rack') target = raw;
+      }
+      return target;
+    }
+
     function setHighlight(el) {
       if (highlighted === el) return;
       if (highlighted) highlighted.classList.remove('drop-ok');
@@ -925,7 +1061,7 @@
 
     function dropIsValid(source, target) {
       if (!target) return false;
-      if (target.type === 'rack') return source.type === 'board';
+      if (target.type === 'rack') return true; // board tile -> take back; rack tile -> reorder
       const ignore = source.type === 'board' ? `${source.row},${source.col}` : null;
       return isFreeSquare(target.row, target.col, ignore);
     }
@@ -949,7 +1085,8 @@
       if (!press.dragging && Math.hypot(event.clientX - press.startX, event.clientY - press.startY) > slop) {
         press.dragging = true;
         press.ghost = press.el.cloneNode(true);
-        press.ghost.classList.remove('selected', 'pending', 'staged', 'ghost', 'last', 'boosted', 'boost-2', 'boost-3');
+        press.ghost.classList.remove('selected', 'pending', 'staged', 'ghost', 'last', 'boosted', 'boost-2', 'boost-3', 'boost-hi');
+        for (const badge of press.ghost.querySelectorAll('.m')) badge.remove();
         const src = press.source;
         const entry = src.type === 'board' ? local.pending.find((q) => q.row === src.row && q.col === src.col) : null;
         const letter = src.type === 'rack' ? S.rack[src.index] : (entry ? entry.letter : '');
@@ -965,7 +1102,7 @@
       if (press.dragging) {
         press.ghost.style.left = `${event.clientX}px`;
         press.ghost.style.top = `${aimY(event.clientY)}px`;
-        const target = targetAt(event.clientX, aimY(event.clientY));
+        const target = resolveTarget(event.clientX, event.clientY);
         setHighlight(dropIsValid(press.source, target) ? target.el : null);
         if (press.valueEl) {
           const mult = target && target.type === 'cell' ? letterMult(target.row, target.col) : 1;
@@ -992,7 +1129,7 @@
 
     function onPointerUp(event) {
       if (!press || event.pointerId !== press.pointerId) return;
-      const target = press.dragging ? targetAt(event.clientX, aimY(event.clientY)) : null;
+      const target = press.dragging ? resolveTarget(event.clientX, event.clientY) : null;
       const p = endPress();
       // Swallow only the synthetic click that follows a tile press; a window any longer eats a
       // quick "tap tile, tap square" on a phone.
@@ -1001,7 +1138,8 @@
       if (!p.dragging) { handleTap(p.source, p.touch); return; }
       if (!dropIsValid(p.source, target)) return;
       if (target.type === 'rack') {
-        removePending(p.source.row, p.source.col);
+        if (p.source.type === 'rack') reorderRack(p.source.index, event.clientX);
+        else removePending(p.source.row, p.source.col);
       } else if (p.source.type === 'rack') {
         placeFromRack(p.source.index, target.row, target.col);
       } else {
@@ -1079,22 +1217,176 @@
     function centerBoardOn(cell) {
       const box = els.boardScroll;
       if (!cell || box.scrollWidth <= box.clientWidth) return;
+      const a = cell.getBoundingClientRect();
+      const b = box.getBoundingClientRect();
       box.scrollTo({
-        left: cell.offsetLeft + cell.offsetWidth / 2 - box.clientWidth / 2,
-        top: cell.offsetTop + cell.offsetHeight / 2 - box.clientHeight / 2,
+        left: box.scrollLeft + (a.left - b.left) + a.width / 2 - box.clientWidth / 2,
+        top: box.scrollTop + (a.top - b.top) + a.height / 2 - box.clientHeight / 2,
       });
     }
-    function setZoom(on, { center = true } = {}) {
+    function setZoom(on, { center = true, persist = true } = {}) {
       els.boardScroll.classList.toggle('zoomed', on);
       els.zoom.setAttribute('aria-pressed', on ? 'true' : 'false');
       els.zoom.textContent = on ? 'Fit board' : 'Zoom board';
-      store.set(ZOOM_KEY, on ? '1' : '0');
-      if (on && center && cells.length) {
+      if (persist) store.set(ZOOM_KEY, on ? '1' : '0');
+      queueMinimap();
+      if (on && center && cells.size) {
         const target = local.pending[local.pending.length - 1];
-        centerBoardOn(target ? cells[target.row][target.col] : cells[config.center[0]][config.center[1]]);
+        centerBoardOn(cells.get(target ? `${target.row},${target.col}` : `${config.center[0]},${config.center[1]}`));
       }
     }
     els.zoom.addEventListener('click', () => setZoom(!els.boardScroll.classList.contains('zoomed')));
+
+    // Square size while zoomed (pinch changes it). The CSS default is --zoom-cell on :root.
+    const MIN_CELL = 22;
+    const MAX_CELL = 80;
+    const currentCell = () => parseFloat(getComputedStyle(els.boardScroll).getPropertyValue('--zoom-cell')) || 44;
+    function setCellSize(px, anchorX, anchorY) {
+      const box = els.boardScroll;
+      const before = currentCell();
+      const next = Math.max(MIN_CELL, Math.min(MAX_CELL, px));
+      if (Math.abs(next - before) < 0.1) return;
+      box.style.setProperty('--zoom-cell', `${next.toFixed(1)}px`);
+      // Keep the point under the fingers where it was.
+      const ratio = next / before;
+      box.scrollLeft = (box.scrollLeft + anchorX) * ratio - anchorX;
+      box.scrollTop = (box.scrollTop + anchorY) * ratio - anchorY;
+    }
+    const savedCell = Number(store.get(ZOOM_CELL_KEY));
+    if (savedCell >= MIN_CELL && savedCell <= MAX_CELL) els.boardScroll.style.setProperty('--zoom-cell', `${savedCell}px`);
+
+    // ---------- pan (mouse drag) and pinch zoom (two fingers) ----------
+    // One-finger touch panning is the browser's own scrolling; the mouse gets drag-to-scroll on
+    // empty board squares (dragging a tentative tile still moves the tile).
+    let pan = null;
+    els.boardScroll.addEventListener('pointerdown', (event) => {
+      const box = els.boardScroll;
+      if (event.pointerType !== 'mouse' || event.button !== 0 || press) return;
+      if (event.target.closest('.tile.pending')) return;
+      if (box.scrollWidth <= box.clientWidth && box.scrollHeight <= box.clientHeight) return;
+      pan = { x: event.clientX, y: event.clientY, left: box.scrollLeft, top: box.scrollTop, moved: false, id: event.pointerId };
+    });
+    document.addEventListener('pointermove', (event) => {
+      if (!pan || event.pointerId !== pan.id) return;
+      const dx = event.clientX - pan.x;
+      const dy = event.clientY - pan.y;
+      if (!pan.moved && Math.hypot(dx, dy) < 5) return;
+      pan.moved = true;
+      els.boardScroll.classList.add('panning');
+      els.boardScroll.scrollLeft = pan.left - dx;
+      els.boardScroll.scrollTop = pan.top - dy;
+    });
+    const endPan = () => {
+      if (pan && pan.moved) suppressClickUntil = performance.now() + 150;  // a drag is not a tap on a square
+      pan = null;
+      els.boardScroll.classList.remove('panning');
+    };
+    document.addEventListener('pointerup', endPan);
+    document.addEventListener('pointercancel', endPan);
+
+    let pinch = null;
+    const touchDist = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+    els.boardScroll.addEventListener('touchstart', (event) => {
+      if (event.touches.length === 2 && !press) {
+        pinch = { dist: touchDist(event.touches), cell: currentCell(), wasZoomed: els.boardScroll.classList.contains('zoomed') };
+      }
+    }, { passive: true });
+    els.boardScroll.addEventListener('touchmove', (event) => {
+      if (!pinch || event.touches.length !== 2) return;
+      const scale = touchDist(event.touches) / pinch.dist;
+      if (!pinch.wasZoomed) {
+        if (scale > 1.2) { setZoom(true, { center: false }); pinch.wasZoomed = true; pinch.dist = touchDist(event.touches); }
+        return;
+      }
+      const box = els.boardScroll.getBoundingClientRect();
+      const mx = (event.touches[0].clientX + event.touches[1].clientX) / 2 - box.left;
+      const my = (event.touches[0].clientY + event.touches[1].clientY) / 2 - box.top;
+      setCellSize(pinch.cell * scale, mx, my);
+    }, { passive: true });
+    const endPinch = (event) => {
+      if (pinch && event.touches.length < 2) {
+        pinch = null;
+        store.set(ZOOM_CELL_KEY, String(Math.round(currentCell())));
+        updateMinimap();
+      }
+    };
+    els.boardScroll.addEventListener('touchend', endPinch, { passive: true });
+    els.boardScroll.addEventListener('touchcancel', endPinch, { passive: true });
+
+    // ---------- minimap ----------
+    // A small overview of the whole (possibly very large) board with the visible part outlined.
+    // Tap or drag on it to jump there. Only shown while the board is zoomed and overflows its frame.
+    let minimapQueued = false;
+    function updateMinimap() {
+      const box = els.boardScroll;
+      const canvas = els.minimap;
+      if (!S || !builtBounds) return;
+      const overflow = box.classList.contains('zoomed')
+        && (box.scrollWidth > box.clientWidth + 2 || box.scrollHeight > box.clientHeight + 2);
+      canvas.hidden = !overflow;
+      if (!overflow) return;
+      const b = builtBounds;
+      const cols = b.right - b.left + 1;
+      const rows = b.bottom - b.top + 1;
+      const px = Math.min(canvas.width / cols, canvas.height / rows);
+      const ox = (canvas.width - cols * px) / 2;
+      const oy = (canvas.height - rows * px) / 2;
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = 'rgba(255, 243, 230, .94)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#f3d3b4';
+      ctx.fillRect(ox, oy, cols * px, rows * px);
+      const [cr, cc] = config.center;
+      ctx.fillStyle = '#e1a14a';
+      ctx.fillRect(ox + (cc - b.left) * px, oy + (cr - b.top) * px, Math.max(px, 2), Math.max(px, 2));
+      ctx.fillStyle = '#6d3bc4';
+      for (const key of Object.keys(S.board)) {
+        const [r, c] = key.split(',').map(Number);
+        ctx.fillRect(ox + (c - b.left) * px, oy + (r - b.top) * px, Math.max(px, 2), Math.max(px, 2));
+      }
+      ctx.fillStyle = '#e8590c';
+      for (const p of local.pending) {
+        ctx.fillRect(ox + (p.col - b.left) * px, oy + (p.row - b.top) * px, Math.max(px, 2), Math.max(px, 2));
+      }
+      ctx.strokeStyle = '#1b1b1b';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(
+        ox + (box.scrollLeft / box.scrollWidth) * cols * px + 0.75,
+        oy + (box.scrollTop / box.scrollHeight) * rows * px + 0.75,
+        Math.min(1, box.clientWidth / box.scrollWidth) * cols * px - 1.5,
+        Math.min(1, box.clientHeight / box.scrollHeight) * rows * px - 1.5,
+      );
+    }
+    const queueMinimap = () => {
+      if (minimapQueued) return;
+      minimapQueued = true;
+      requestAnimationFrame(() => { minimapQueued = false; updateMinimap(); });
+    };
+    els.boardScroll.addEventListener('scroll', queueMinimap, { passive: true });
+    window.addEventListener('resize', queueMinimap);
+    function minimapJump(event) {
+      const box = els.boardScroll;
+      const rect = els.minimap.getBoundingClientRect();
+      const b = builtBounds;
+      const cols = b.right - b.left + 1;
+      const rows = b.bottom - b.top + 1;
+      const px = Math.min(els.minimap.width / cols, els.minimap.height / rows);
+      const scaleX = els.minimap.width / rect.width;
+      const scaleY = els.minimap.height / rect.height;
+      const x = ((event.clientX - rect.left) * scaleX - (els.minimap.width - cols * px) / 2) / (cols * px);
+      const y = ((event.clientY - rect.top) * scaleY - (els.minimap.height - rows * px) / 2) / (rows * px);
+      box.scrollLeft = Math.max(0, Math.min(1, x)) * box.scrollWidth - box.clientWidth / 2;
+      box.scrollTop = Math.max(0, Math.min(1, y)) * box.scrollHeight - box.clientHeight / 2;
+    }
+    els.minimap.addEventListener('pointerdown', (event) => {
+      event.preventDefault();
+      els.minimap.setPointerCapture(event.pointerId);
+      minimapJump(event);
+    });
+    els.minimap.addEventListener('pointermove', (event) => {
+      if (els.minimap.hasPointerCapture(event.pointerId)) minimapJump(event);
+    });
 
     // ---------- buttons ----------
     els.submit.addEventListener('click', () => {
@@ -1116,7 +1408,20 @@
 
     els.swap.addEventListener('click', openSwapModal);
 
+    els.shuffle.addEventListener('click', () => {
+      if (!S || S.status === 'waiting' || S.rack.length < 2) return;
+      const order = rackIndices();
+      for (let i = order.length - 1; i > 0; i -= 1) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [order[i], order[j]] = [order[j], order[i]];
+      }
+      local.rackOrder = order.map((i) => S.rack[i]);
+      saveRackOrder();
+      render();
+    });
+
     els.settingsBtn.addEventListener('click', openSettingsModal);
+    els.start.addEventListener('click', () => act('start_game', {}, () => toast('Game started.')));
     els.info.addEventListener('click', openInfoModal);
 
     els.pass.addEventListener('click', () => {
@@ -1149,7 +1454,10 @@
     els.shareUrl.addEventListener('focus', () => els.shareUrl.select());
 
     // ---------- boot ----------
-    if (store.get(ZOOM_KEY) === '1') setZoom(true, { center: false });
+    // The 27x19 board is small on a phone, so start zoomed there unless the player chose otherwise.
+    const zoomPref = store.get(ZOOM_KEY);
+    if (zoomPref === '1') setZoom(true, { center: false });
+    else if (zoomPref === null && window.innerWidth <= 700) setZoom(true, { center: false, persist: false });
     els.modeLabel.textContent = `${modeLabel(document.body.dataset.mode)} · ${LENGTH_LABEL[document.body.dataset.length] || ''}${timerShort(document.body.dataset.timer)}`;
     if (session.token) {
       startSocket(); // saved session token -> rejoin automatically

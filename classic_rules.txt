@@ -1,0 +1,129 @@
+INTRODUCTION
+
+Like all the best games, Scrabble is easy to learn but difficult to master. Still, If this is your first time playing Scrabble, you should familiarize yourself with the rules of the game.
+
+Every game of Scrabble starts with the same set of tiles. In English, there are 100 tiles. Common letters like the E appear frequently, and less common letters like the Q and Z appear only once. These less common letters are worth more points to compensate.
+
+Valid words include words of any part of speech, except for proper nouns, abbreviations, or words requiring hyphens or apostrophes. Keep in mind that there are words that look like proper nouns but are still in the dictionary for other reasons. For example, TEXAS is a valid Scrabble word, not because it’s a state, but because it’s the section of a steamboat that includes the crew’s quarters. 
+BASIC GAMEPLAY
+
+To begin each game, both players are given seven tiles from the tile bag. The website determines which player goes first at random.
+
+If you’re going first, place a word on the board with at least one letter of that word touching the center star. You may play either across or down, as long as you touch the center star. Diagonal words are not permitted. Your word must be at least two letters in length.
+
+Click “Submit” or hit Enter on the keyboard to submit your word and end your turn.
+
+Once you play your word, you will be given new tiles from the tile bag to replace the ones you’ve used. Until the very end of the game, when there aren’t enough tiles left, you’ll always be given seven tiles to use. 
+
+Your opponent will then get a turn to make a move of their own. The game will proceed with players alternating turns until the end of the game.
+
+All letters played on each individual turn must be placed in only one row or column. 
+
+You may play your letters alongside other letters on the board. In fact, it’s encouraged! But when you do this, ALL of the words formed by your play must be valid Scrabble words.
+SCORING
+
+Scores are automatically calculated when you enter a word. The score of your move is the sum of the letter values in each word formed by your play, plus additional points obtained from placing letters on Premium Squares.
+
+There are four types of Premium Squares – Double Letter, Triple Letter, Double Word, and Triple Word Scores. The letter bonuses multiply the value of individual letters, and the word bonuses multiple the value of the full word. The center star is a Double Word square.
+
+Once a Premium Square has been used, it may not be used again by connecting a new word to that square on a later turn. On later turns, the values of letters played on Premium Squares are simply the face value of that letter.
+
+When you can, forming words that connect two different types of Premium Squares is a great way to rack up points. First, individual letter bonuses are calculated; then, word bonuses are calculated.
+
+If you form multiple words on one play using the same Premium Square, you get the bonus for each word formed. 
+
+Playing all seven of your tiles on a turn is known as a “bingo” or a “bonus.” You receive 50 bonus points in addition to the regular score of your word!
+BLANKS
+
+Two of the 100 tiles in English-language Scrabble are “blanks.” You may use them as any letter you wish. This makes them extremely valuable. When playing a blank, you will be shown a pop-up menu to designate which letter you would like the blank to become. The blank remains that same letter for the rest of the game. Blanks are worth zero points regardless of which letter you choose, but their flexibility more than makes up for it.
+SWAPPING TILES
+
+If you cannot find a word on your turn, you may use your turn to swap tiles instead. Select “Swap” from the menu and click on the tiles you want to swap. Those tiles will return to the bag, and you’ll receive new tiles in their place. This counts as your turn, scoring zero points, and your opponent will get the next move. But if you have very poor tiles (all vowels, all consonants, etc.), this can sometimes be your best option!
+CHALLENGES
+
+You can play using automatic word validation, where all of your moves are checked automatically against the Scrabble dictionary when you attempt to submit them.
+
+You can also play using challenges.
+
+If you play with challenges enabled, you will be able to make plays that are not valid words in the Scrabble dictionary. It will be up to your opponent to challenge the word. By the same token, your opponent will be able to do the same, and it will be up to you to challenge.
+
+If you play an invalid word and your opponent challenges, your word will be removed from the board, you will receive zero points for your turn, and your opponent will be given the next move.
+
+If you play a valid word and your opponent challenges your word, congratulations! You won the challenge. The result will now depend on the challenge rule used in your game.
+
+If you’re playing with a “point” challenge rule, you will receive extra points for your move. If you’re playing with a “turn” challenge rule (also known as “double challenge”), your opponent will lose their turn, and you will be given the next move.
+
+Let’s recap this from the opposite point of view now.
+
+If you challenge a word your opponent plays and it is not in the dictionary, the word will be removed from the board, they will receive zero points for that turn, and it will immediately become your turn.
+
+On the other hand, if you challenge a word your opponent plays and it IS a valid Scrabble word, you have lost the challenge. Either your opponent will gain more points for their move, or you will lose your turn, granting your opponent the next move.
+TIME
+
+There are several options for the amount of time you would like to spend playing your game. In each case, both you and your opponent will receive the same amount of time. For example, in a 3-minute game, you and your opponent will each have 3 minutes of time to spend on your moves. In a 45-minute game, both your and your opponent will each have 45 minutes of time. 
+
+This timer does not reset after each move. It represents the total time you have to make all of your moves in the game, so you need to budget it wisely. Use your opponent’s turns to think about your next move without losing any time from your clock.
+
+If you use up all of your time in a game, you will enter overtime, signified by the color red. As soon as you enter overtime, you will receive a penalty of ten points. For each full minute of overtime you spend, you will lose ten additional points. Your point penalty will display alongside your score. Once you have depleted your overtime, you will immediately forfeit the game, even if you have a higher score than your opponent.
+TILE BAG
+
+The tiles you have yet to see either on the board or on your rack are displayed on-screen at all times. You’ll see three numbers: Tile Bag, Vowels, and Consonants.
+
+When the Tile Bag number drops below 7 tiles, you will no longer be permitted to exchange. When it drops to 0 tiles, you will no longer be given replenishment tiles after your plays.
+
+All of the tiles you have yet to see are displayed individually in the window below, including the tiles on your opponent’s rack. The numbers for Vowels and Consonants remaining are pulled from this window. This is why the sum of these numbers will add up to 7 more tiles than the number shown for the Tile Bag for most of the game.
+
+When the Tile Bag is empty, displaying “0” on screen, the contents of the window below it will be your opponent’s exact tiles. They will also be able to see your exact tiles at this juncture of the game. Use this information to guide your plays at the end of each game!
+TURN HISTORY
+
+The Turn History window shows the plays made in the current game, from most recent to least recent. Clicking any word in this window will reveal its definition.
+END OF GAME
+
+When all of the letters have been drawn, and one player empties their rack using their last letter/s, the game is over. The player with tiles remaining on their rack will subtract the value of those tiles from their score. This same value will then be added to the score of the player who used up their tiles.
+SKIPPING AND RESIGNING
+
+You may skip your turn at any time by clicking “Skip” and confirming your choice in the pop-up menu. In general, this is only done when a player cannot find any valid moves on a turn.
+
+You may also resign your game at any time by clicking “Resign” and confirming your choice in the pop-up menu.
+
+# Classic board layout
+# Each cell is a string representing the premium square type:
+#   ""  = normal square
+#   "DL" = Double Letter
+#   "TL" = Triple Letter
+#   "DW" = Double Word
+#   "TW" = Triple Word
+#   "★"  = center star (also a Double Word square)
+
+SCRABBLE_BOARD = [
+    # Row 0
+    ["TW", "",  "",  "DL", "",  "",  "",  "TW", "",  "",  "",  "DL", "",  "",  "TW"],
+    # Row 1
+    ["",  "DW", "",  "",  "",  "TL", "",  "",  "",  "TL", "",  "",  "",  "DW", ""],
+    # Row 2
+    ["",  "",  "DW", "",  "",  "",  "DL", "",  "DL", "",  "",  "",  "DW", "",  ""],
+    # Row 3
+    ["DL", "",  "",  "DW", "",  "",  "",  "DL", "",  "",  "",  "DW", "",  "",  "DL"],
+    # Row 4
+    ["",  "",  "",  "",  "DW", "",  "",  "",  "",  "",  "DW", "",  "",  "",  ""],
+    # Row 5
+    ["",  "TL", "",  "",  "",  "TL", "",  "",  "",  "TL", "",  "",  "",  "TL", ""],
+    # Row 6
+    ["",  "",  "DL", "",  "",  "",  "DL", "",  "DL", "",  "",  "",  "DL", "",  ""],
+    # Row 7
+    ["TW", "",  "",  "DL", "",  "",  "",  "★",  "",  "",  "",  "DL", "",  "",  "TW"],
+    # Row 8
+    ["",  "",  "DL", "",  "",  "",  "DL", "",  "DL", "",  "",  "",  "DL", "",  ""],
+    # Row 9
+    ["",  "TL", "",  "",  "",  "TL", "",  "",  "",  "TL", "",  "",  "",  "TL", ""],
+    # Row 10
+    ["",  "",  "",  "",  "DW", "",  "",  "",  "",  "",  "DW", "",  "",  "",  ""],
+    # Row 11
+    ["DL", "",  "",  "DW", "",  "",  "",  "DL", "",  "",  "",  "DW", "",  "",  "DL"],
+    # Row 12
+    ["",  "",  "DW", "",  "",  "",  "DL", "",  "DL", "",  "",  "",  "DW", "",  ""],
+    # Row 13
+    ["",  "DW", "",  "",  "",  "TL", "",  "",  "",  "TL", "",  "",  "",  "DW", ""],
+    # Row 14
+    ["TW", "",  "",  "DL", "",  "",  "",  "TW", "",  "",  "",  "DL", "",  "",  "TW"],
+]

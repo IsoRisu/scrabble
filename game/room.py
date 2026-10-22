@@ -12,22 +12,26 @@ played (see ``Room.update_settings``); they are not chosen at room creation.
 mode  (scoring and word checking)
   wild     The default. Every word is checked against the dictionary
            automatically (the live preview shows validity and invalid plays
-           are rejected). A tile placed on a double/triple letter square keeps
-           its multiplied value for the rest of the game, so later words that
-           use it score the improved value.
+           are rejected). Letters affected by a bonus keep it for good: a tile
+           placed on a double/triple letter square keeps that multiplier, and
+           every letter of a word that earned a double/triple word bonus keeps
+           it too. Later words that use those letters score the improved
+           values, but letters added to them later are not multiplied. A bingo
+           doubles the main word instead of adding a flat 50 points.
   classic  Traditional Scrabble scoring: premium squares only count on the
-           turn the tile is placed. Any geometrically legal play is accepted
+           turn the tile is placed, and a bingo is worth a flat 50 points. Any
+           geometrically legal play is accepted
            and the opponent may challenge it on their turn
            (``challenge_skip``): if a word is not in the dictionary the play is
            taken back and the player loses their turn; if all words are valid
            the challenger loses their own turn.
 
-players (2-4): the game starts when that many have joined, or earlier when
+players (2-16): the game starts when that many have joined, or earlier when
         the host (first player) calls ``Room.start_now`` with at least two in.
         Only wild supports more than two; classic is two-player. Changeable
         until the game starts.
 
-length  (tiles in the bag): short, medium or full.
+length  (tiles in the bag): short (50), medium (100, the standard set) or full (150).
 
 timer   (per-turn clock): off, or 30s / 60s / 90s / 2m / 3m / 5m for each turn.
         When a player's clock runs out the server passes for them
@@ -50,16 +54,17 @@ import threading
 import time
 from dataclasses import dataclass, field
 
-from .board import BOARD_SIZE, Board, GameError, Placement
-from .scoring import BINGO_BONUS, PREMIUM, letter_boost, score_move
+from .board import BOARD_COLS, BOARD_ROWS, BOARD_SIZE, Board, GameError, Placement, classic_bounds, initial_bounds
+from .scoring import BINGO_BONUS, PERIOD, PREMIUM, letter_boost, score_move, word_factor
 from .tiles import BLANK, LANGUAGES, RACK_SIZE, TILE_DISTRIBUTIONS, TILE_VALUES, new_bag, tile_value
 
 ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no 0/O/1/I
 ROOM_CODE_LENGTH = 8
 MIN_PLAYERS = 2
-MAX_PLAYERS = 4  # wild games; classic (challenge) rules stay strictly two-player
+MAX_PLAYERS = 16  # wild games; classic (challenge) rules stay strictly two-player
 DEFAULT_PLAYERS = 2
 MAX_NAME_LENGTH = 20
+SKIP_GRACE = 30  # seconds a player on turn must be offline before the others may skip them
 HISTORY_LIMIT = 60
 SCORELESS_TURN_LIMIT = 6  # consecutive passes/swaps/failed challenges that end the game
 
@@ -70,17 +75,19 @@ MODES = ("wild", "classic")
 DEFAULT_MODE = "wild"
 MODE_RULES = {"wild": "strict", "classic": "challenge"}
 # Tiles in the bag at the start of the game (racks are dealt from it).
-LENGTHS = {"short": 50, "medium": 75, "full": 100}
-DEFAULT_LENGTH = "full"
+LENGTHS = {"short": 50, "medium": 100, "full": 150}
+DEFAULT_LENGTH = "medium"
 RULES = tuple(MODE_RULES.values())
 # Per-turn timer options: key -> seconds (0 = no timer).
 TIMERS = {"off": 0, "30s": 30, "60s": 60, "90s": 90, "2m": 120, "3m": 180, "5m": 300}
 DEFAULT_TIMER = "off"
 DEFAULT_LANGUAGE = "en"
-# Auto board expansion: when a tile lands within `expand_margin` rings of the
-# edge the board grows so that many empty rings surround all tiles.  The toggle
-# defaults to on in wild, off in classic, unless a player sets it explicitly.
-DEFAULT_EXPAND_MARGIN = 5
+# Auto board expansion: the board starts as 27x19 and, when a tile lands within
+# `expand_margin` rings of an edge, grows so that many empty rings surround all
+# tiles.  The default margin equals the rack size, so a full-rack word can always
+# be laid out away from any tile.  On by default in Wild only: Classic is the
+# standard fixed 15x15 Scrabble board.  Either can be overridden explicitly.
+DEFAULT_EXPAND_MARGIN = RACK_SIZE
 MIN_EXPAND_MARGIN, MAX_EXPAND_MARGIN = 1, 10
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -88,6 +95,11 @@ ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # Everything the client needs to render the board that never changes.
 CONFIG = {
     "size": BOARD_SIZE,
+    "rows": BOARD_ROWS,
+    "cols": BOARD_COLS,
+    "bounds": initial_bounds(),  # Wild; Classic uses "classic_bounds"
+    "classic_bounds": classic_bounds(),
+    "premium_period": PERIOD,
     "rack_size": RACK_SIZE,
     "bingo_bonus": BINGO_BONUS,
     "center": [7, 7],
@@ -179,6 +191,24 @@ def check_expand_margin(value):
         raise GameError(f"Board margin must be a whole number from {MIN_EXPAND_MARGIN} to {MAX_EXPAND_MARGIN}.")
 
 
+def check_capacity(length, players):
+    """Every player needs a full rack from the bag, so the game length caps the player count."""
+    if players * RACK_SIZE > LENGTHS[length]:
+        raise GameError(
+            f"A {length} game has {LENGTHS[length]} tiles, not enough for {players} players. "
+            "Choose a longer game or fewer players."
+        )
+
+
+def length_for_players(players, preferred=DEFAULT_LENGTH):
+    """The shortest game length that can deal every player a full rack (never shorter than `preferred`)."""
+    order = sorted(LENGTHS, key=LENGTHS.get)
+    for key in order[order.index(preferred):]:
+        if players * RACK_SIZE <= LENGTHS[key]:
+            return key
+    return order[-1]
+
+
 def check_players(mode, count):
     """Validate a room's player count for the given mode."""
     if not _is_int(count) or not MIN_PLAYERS <= count <= MAX_PLAYERS:
@@ -212,6 +242,7 @@ class Player:
     seat: int
     sid: str = None
     connected: bool = False
+    left_at: float = None  # room clock() value when the player's last socket dropped
     rack: list = field(default_factory=list)
     score: int = 0
     pending: list = field(default_factory=list)  # tentative placements (see Room.place_tiles)
@@ -241,6 +272,7 @@ class Room:
             raise GameError("Auto-expand must be on or off.")
         check_expand_margin(expand_margin)
         check_players(mode, max_players)
+        check_capacity(length, max_players)
         check_language(language)
         self._auto_expand = auto_expand  # None = follow the mode's default
         self.expand_margin = expand_margin
@@ -253,14 +285,15 @@ class Room:
         self.clock = clock or time.time  # injectable so tests can move time
         self.turn_deadline = None  # clock() value at which the current turn expires
         self._clock_sig = None
+        self._skippable_seen = None
         self.turns_played = 0  # plays, passes, swaps and challenges so far
         self.rng = rng or random.Random()
         self.created = self.last_active = time.time()
         self.lock = threading.RLock()
 
         self.players = []
-        self.board = Board()
-        self.bag = new_bag(self.language, self.rng)[: LENGTHS[self.length]]
+        self.board = Board(classic=mode == "classic")
+        self.bag = new_bag(self.language, self.rng, LENGTHS[self.length])
         self.status = "waiting"  # waiting -> playing -> finished
         self.current = 0  # seat whose turn it is
         self.scoreless_turns = 0
@@ -287,7 +320,7 @@ class Room:
 
     @property
     def auto_expand(self):
-        """Whether the board grows automatically (explicit choice, else on for wild only)."""
+        """Whether the board grows automatically (explicit choice, else on for Wild only)."""
         if self._auto_expand is not None:
             return self._auto_expand
         return self.mode == "wild"
@@ -314,6 +347,7 @@ class Room:
             raise GameError("Auto-expand must be on or off.")
         if expand_margin is not None:
             check_expand_margin(expand_margin)
+        length_arg = length
         mode = mode or self.mode
         length = length or self.length
         timer = timer or self.timer
@@ -323,6 +357,11 @@ class Room:
         if max_players is None and mode == "classic" and new_max != 2:
             new_max = 2  # classic is two-player only
         check_players(mode, new_max)
+        auto_length = None
+        if length_arg is None and new_max * RACK_SIZE > LENGTHS[length]:
+            # The player count outgrew the bag and no length was chosen: pick one that fits.
+            auto_length = length = length_for_players(new_max, length)
+        check_capacity(length, new_max)
         if new_max != self.max_players and self.status != "waiting":
             raise GameError("The number of players can only be changed before the game starts.")
         if new_max < len(self.players):
@@ -337,6 +376,8 @@ class Room:
         length_changed = length != self.length
         language_changed = language != self.language
         self.mode, self.length, self.timer = mode, length, timer
+        if self.board.is_empty():  # settings are locked once a tile is down
+            self.board = Board(classic=mode == "classic")
         self.expand_margin = expand_margin
         self.max_players = new_max
         self.language = language
@@ -352,6 +393,8 @@ class Room:
             f"{player.name} set the game to {label} scoring, {length} length "
             f"({LENGTHS[length]} tiles), {clock}, {grow}, {self.max_players} players, language {language}.",
         )
+        if auto_length:
+            self._log("system", f"The game length was raised to {length} so every player gets a full rack.")
         self.maybe_start()  # lowering the player count may make the room full
 
     # ---- players -----------------------------------------------------
@@ -381,6 +424,41 @@ class Room:
         self.last_active = time.time()
         self._sync_clock()  # a new turn gets a fresh clock the moment the action lands
         self._reconcile_staged()  # revalidate prepared words / load them when their turn starts
+
+    def player_joined(self, player, sid):
+        """Bind a (new) socket to the player and mark them online."""
+        player.sid = sid
+        player.connected = True
+        player.left_at = None
+
+    def player_left(self, player):
+        """The player's socket dropped; remember when, so an abandoned turn can be skipped."""
+        player.connected = False
+        player.sid = None
+        player.left_at = self.clock()
+
+    def skippable_seat(self):
+        """Seat of the player on turn if they have been offline long enough to be skipped, else None."""
+        if self.status != "playing":
+            return None
+        player = self.players[self.current]
+        if player.connected or player.left_at is None:
+            return None
+        return player.seat if self.clock() - player.left_at >= SKIP_GRACE else None
+
+    def skip_player(self, requester, seat):
+        """Pass for an abandoned player (offline for SKIP_GRACE seconds) so the game can go on."""
+        if self.status != "playing":
+            raise GameError("The game is not in progress.")
+        target = self.skippable_seat()
+        if target is None or seat != target:
+            raise GameError(f"A player can only be skipped after being offline for {SKIP_GRACE} seconds.")
+        if requester.seat == target:
+            raise GameError("You cannot skip yourself.")
+        away = self.players[target]
+        self._log("system", f"{requester.name} skipped {away.name}, who is offline.")
+        self.pass_turn(away)  # also accepts a final play while one awaits a challenge
+        return {}
 
     def connected_count(self):
         return sum(1 for p in self.players if p.connected)
@@ -413,7 +491,7 @@ class Room:
 
     def _deal(self):
         """Fill the bag for the chosen length and deal fresh racks."""
-        self.bag = new_bag(self.language, self.rng)[: LENGTHS[self.length]]
+        self.bag = new_bag(self.language, self.rng, LENGTHS[self.length])
         for player in self.players:
             self._clear_pending(player)
             self._clear_staged(player)
@@ -436,10 +514,14 @@ class Room:
         """Pass for the player on turn if their clock has run out. True if something happened."""
         with self.lock:
             self._sync_clock()
+            # The "skip" option appears once a player has been away long enough; tell the caller to push it.
+            skippable = self.skippable_seat()
+            flipped = skippable != self._skippable_seen
+            self._skippable_seen = skippable
             if self.status != "playing" or self.turn_deadline is None:
-                return False
+                return flipped
             if self.clock() < self.turn_deadline:
-                return False
+                return flipped
             player = self.players[self.current]
             self._log("system", f"{player.name} ran out of time.")
             self.pass_turn(player)  # also accepts a final play while one awaits a challenge
@@ -624,7 +706,7 @@ class Room:
             words = self.board.analyze(placements)
         except GameError as exc:
             return {"ok": False, "error": str(exc), "words": [], "total": None, "bingo": False}
-        result = score_move(words, len(placements), self.language)
+        result = score_move(words, len(placements), self.language, self.mode)
         entries = []
         for word, points in zip(words, result.word_scores):
             # In challenge mode validity is deliberately not revealed.
@@ -637,6 +719,7 @@ class Room:
             "words": entries,
             "total": result.total,
             "bingo": result.bingo,
+            "bingo_bonus": result.bonus,
         }
 
     # ---- turn actions ------------------------------------------------
@@ -651,7 +734,7 @@ class Room:
             bad = sorted({w.text for w in words if w.text not in get_words(self.language)})
             if bad:
                 raise GameError("Not in the dictionary: " + ", ".join(bad) + ".")
-        score = score_move(words, len(placements), self.language)
+        score = score_move(words, len(placements), self.language, self.mode)
 
         # Take the tiles off the rack, draw replacements, put them on the board.
         used_indices = sorted({p["rack_index"] for p in player.pending})
@@ -660,11 +743,23 @@ class Room:
             del player.rack[index]
         drawn = self._draw(len(used_indices))
         player.rack.extend(drawn)
-        # Wild scoring: a tile on a letter premium keeps its multiplier for good.
+        # Wild scoring: letters affected by a bonus keep it for good.  A new tile on a
+        # letter premium keeps that multiplier, and every letter of a word that got a
+        # word multiplier (old tiles included) keeps it as well.  Tiles added to those
+        # words later are not multiplied.
         boosts = {}
         if self.mode == "wild":
             boosts = {(p.row, p.col): letter_boost(p.row, p.col) for p in placements}
         self.board.place_all(placements, boosts)
+        if self.mode == "wild":
+            factors = {}
+            for word in words:
+                factor = word_factor(word)
+                if factor > 1:
+                    for cell in word.cells:
+                        key = (cell.row, cell.col)
+                        factors[key] = factors.get(key, 1) * factor
+            self.board.multiply_boosts(factors)
         grew = self.auto_expand and self.board.expand_to_margin(self.expand_margin)
         self.turns_played += 1
         player.score += score.total
@@ -672,7 +767,7 @@ class Room:
 
         texts = [w.text for w in words]
         message = f"{player.name} played {', '.join(texts)} for {score.total}"
-        message += f" (bingo, +{BINGO_BONUS}!)." if score.bingo else "."
+        message += f" (bingo, +{score.bonus}!)." if score.bingo else "."
         self._log("play", message, seat=player.seat)
         if grew:
             self._log("system", "The board expanded.")
@@ -698,7 +793,7 @@ class Room:
                 self._finish(out_seat=player.seat)
         else:
             self.current = self._next_seat(player.seat)
-        return {"score": score.total, "words": texts, "bingo": score.bingo}
+        return {"score": score.total, "words": texts, "bingo": score.bingo, "bingo_bonus": score.bonus}
 
     def pass_turn(self, player):
         self._require_turn(player)
@@ -754,6 +849,8 @@ class Room:
             # Challenge succeeded: take the play back. It is the challenger's
             # turn already, so the mover simply loses theirs.
             self.board.remove_all(move["placements"])
+            if self.auto_expand:
+                self.board.shrink_to_margin(self.expand_margin)  # undo any growth the play caused
             mover.score -= move["score"]
             if move["drawn"]:
                 del mover.rack[len(mover.rack) - len(move["drawn"]):]
@@ -841,13 +938,14 @@ class Room:
         if playing and self.turn_deadline is not None:
             ms_left = max(0, int((self.turn_deadline - self.clock()) * 1000))
 
+        # Tentative (unplayed) tiles are private: only the player who placed them sees them.
         pending = []
-        if mover is not None:
+        if mover is not None and mover is player:
             for p in mover.pending:
-                entry = {"row": p["row"], "col": p["col"], "letter": p["letter"], "blank": p["blank"]}
-                if mover is player:
-                    entry["rack_index"] = p["rack_index"]
-                pending.append(entry)
+                pending.append({
+                    "row": p["row"], "col": p["col"], "letter": p["letter"], "blank": p["blank"],
+                    "rack_index": p["rack_index"],
+                })
 
         last = None
         if self.last_move is not None:
@@ -873,6 +971,7 @@ class Room:
             "timer": self.timer,
             "language": self.language,
             "max_players": self.max_players,
+            "skippable": self.skippable_seat() if player.seat != self.skippable_seat() else None,
             "can_start": self.status == "waiting" and player.seat == 0 and len(self.players) >= MIN_PLAYERS,
             "auto_expand": self.auto_expand,
             "expand_margin": self.expand_margin,

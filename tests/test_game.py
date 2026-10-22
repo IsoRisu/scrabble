@@ -7,11 +7,11 @@ import unittest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from game import room as room_module  # noqa: E402
-from game.board import Board, GameError, Placement  # noqa: E402
+from game.board import Board, GameError, Placement, initial_bounds  # noqa: E402
 from game.room import (  # noqa: E402
     CONFIG, Room, RoomRegistry, clean_name, diff_views, load_words, set_words,
 )
-from game.scoring import PREMIUM, score_move  # noqa: E402
+from game.scoring import PREMIUM, premium_at, score_move  # noqa: E402
 from game.tiles import BLANK, LANGUAGES, TILE_DISTRIBUTIONS, TILE_VALUES, new_bag  # noqa: E402
 
 TILE_DISTRIBUTION = TILE_DISTRIBUTIONS["en"]
@@ -39,7 +39,18 @@ class TileTests(unittest.TestCase):
 
     def test_total_face_value(self):
         total = sum(TILE_VALUES_EN[t] * n for t, n in TILE_DISTRIBUTION.items())
-        self.assertEqual(total, 187)  # the well-known total for the English set
+        # Scrabble's 187, minus an N (1), plus a second K (5), plus 1 for each of the four Ls.
+        self.assertEqual(total, 195)
+
+    def test_english_set_has_letter_league_changes(self):
+        self.assertEqual((TILE_DISTRIBUTION["N"], TILE_DISTRIBUTION["K"]), (5, 2))
+        self.assertEqual(TILE_VALUES_EN["L"], 2)
+        self.assertEqual(sum(TILE_DISTRIBUTION.values()), 100)
+
+    def test_bag_size_option(self):
+        rng = random.Random(1)
+        self.assertEqual(len(new_bag("en", rng, 50)), 50)
+        self.assertEqual(len(new_bag("en", rng, 150)), 150)
 
     def test_bag_is_shuffled_and_rng_is_respected(self):
         a, b = new_bag("en", random.Random(5)), new_bag("en", random.Random(5))
@@ -62,6 +73,18 @@ class PremiumTests(unittest.TestCase):
 
     def test_centre_is_double_word(self):
         self.assertEqual(PREMIUM[(7, 7)], "DW")
+
+    def test_pattern_repeats_so_the_board_can_grow(self):
+        for (r, c), kind in PREMIUM.items():
+            if r < 14 and c < 14:
+                self.assertEqual(premium_at(r + 14, c - 14), kind)
+        self.assertEqual(premium_at(7, 7), "DW")
+        self.assertEqual(premium_at(21, 7), "DW")
+        self.assertEqual(premium_at(-7, 7), "DW")
+        self.assertEqual(premium_at(-14, 0), "TW")
+        for row in range(0, 15):
+            for col in range(0, 15):
+                self.assertEqual(premium_at(row, col), PREMIUM.get((row, col)))
 
     def test_client_config_matches(self):
         self.assertEqual(len(CONFIG["premiums"]), len(PREMIUM))
@@ -112,7 +135,48 @@ class BoardTests(unittest.TestCase):
 
     def test_off_board(self):
         with self.assertRaises(GameError):
-            Board().analyze([P(7, 14, "A"), P(7, 15, "B")])
+            Board().analyze([P(7, 20, "A"), P(7, 21, "B")])
+
+    def test_board_starts_27_by_19_around_the_star(self):
+        board = Board()
+        b = board.bounds()
+        self.assertEqual((b["right"] - b["left"] + 1, b["bottom"] - b["top"] + 1), (27, 19))
+        self.assertTrue(board.in_bounds(7, 7))
+        self.assertEqual(b, initial_bounds())
+        self.assertTrue(board.in_bounds(7, 20) and not board.in_bounds(7, 21))
+        self.assertTrue(board.in_bounds(-2, 7) and not board.in_bounds(-3, 7))
+
+    def test_board_grows_towards_the_tiles_and_never_shrinks(self):
+        board = Board()
+        board.place_all([P(7, 15, "A")])
+        self.assertTrue(board.expand_to_margin(7))
+        self.assertEqual(board.bounds()["right"], 22)
+        self.assertEqual(board.bounds()["left"], -6)  # the other sides did not move
+        board.place_all([P(-4, 7, "B")])
+        self.assertTrue(board.expand_to_margin(7))
+        self.assertEqual(board.bounds()["top"], -11)
+        board.remove_all([P(7, 15, "A")])
+        self.assertFalse(board.expand_to_margin(7))
+        self.assertEqual(board.bounds()["right"], 22)
+
+    def test_no_growth_while_tiles_stay_clear_of_the_edge(self):
+        board = Board()
+        board.place_all(word_placements("HELLO", 7, 3))
+        self.assertFalse(board.expand_to_margin(7))
+        self.assertEqual(board.bounds(), initial_bounds())
+
+    def test_expanded_squares_are_playable_and_have_premiums(self):
+        board = Board()
+        board.place_all(word_placements("CAT", 7, 18))
+        board.expand_to_margin(7)
+        words = board.analyze([P(7, 21, "S"), P(7, 22, "Y")])
+        self.assertEqual([w.text for w in words], ["CATSY"])
+
+    def test_multiply_boosts(self):
+        board = Board()
+        board.place_all([P(7, 7, "A")], boosts={(7, 7): 2})
+        board.multiply_boosts({(7, 7): 3, (0, 0): 5})
+        self.assertEqual(board.get(7, 7).boost, 6)
 
     def test_extending_an_existing_word(self):
         board = Board()
@@ -163,9 +227,9 @@ class ScoringTests(unittest.TestCase):
         return score_move(words, len(placements))
 
     def test_hello_on_the_star(self):
-        # H on a double letter (7,3), O on the centre double word: (8 + 1 + 1 + 1 + 1) * 2
+        # H on a double letter (7,3), O on the centre double word: (8 + 1 + 2 + 2 + 1) * 2
         result = self.score(Board(), word_placements("HELLO", 7, 3))
-        self.assertEqual(result.total, 24)
+        self.assertEqual(result.total, 28)
         self.assertFalse(result.bingo)
 
     def test_premium_squares_only_count_once(self):
@@ -173,7 +237,7 @@ class ScoringTests(unittest.TestCase):
         board.place_all(word_placements("HELLO", 7, 3))
         # Extend to HELLOS at (7,8): no premium there, and the old DW must not re-apply.
         result = self.score(board, [P(7, 8, "S")])
-        self.assertEqual(result.total, 4 + 1 + 1 + 1 + 1 + 1)
+        self.assertEqual(result.total, 4 + 1 + 2 + 2 + 1 + 1)
 
     def test_cross_word_scoring(self):
         board = Board()
@@ -208,6 +272,27 @@ class ScoringTests(unittest.TestCase):
         # premium squares on row 7: (7,3) DL -> T doubled, (7,7) DW
         expected = (letters + TILE_VALUES_EN["T"]) * 2 + 50
         self.assertEqual(result.total, expected)
+        self.assertEqual(result.bonus, 50)
+
+    def test_wild_bingo_doubles_only_the_main_word(self):
+        board = Board()
+        board.place_all([P(6, 10, "A"), P(8, 10, "E")])  # a tile above and below column 10
+        placements = word_placements("RETINAS", 7, 4)  # row 7, cols 4..10; S crosses A_E at col 10
+        words = board.analyze(placements)
+        self.assertEqual(words[0].text, "RETINAS")
+        self.assertEqual(words[1].text, "ASE")
+        base = score_move(words, 7, "en", "classic")
+        wild = score_move(words, 7, "en", "wild")
+        self.assertTrue(wild.bingo)
+        self.assertEqual(wild.word_scores, base.word_scores)
+        self.assertEqual(wild.bonus, base.word_scores[0])  # main word counted twice
+        self.assertEqual(wild.total, sum(base.word_scores) + base.word_scores[0])
+        self.assertEqual(base.total, sum(base.word_scores) + 50)
+
+    def test_bingo_mode_defaults_to_classic(self):
+        words = Board().analyze(word_placements("RETINAS", 7, 1))
+        self.assertEqual(score_move(words, 7).bonus, 50)
+        self.assertEqual(score_move(words, 7, "en", "wild").bonus, score_move(words, 7).word_scores[0])
 
 
 class WildScoringTests(unittest.TestCase):
@@ -231,8 +316,8 @@ class WildScoringTests(unittest.TestCase):
         board = Board()
         board.place_all(word_placements("HELLO", 7, 3), boosts={(7, 3): 2})  # H boosted x2 = 8
         words = board.analyze([P(7, 8, "S")])
-        # H 8 + E + L + L + O + S = 13, no premium re-applied to old tiles
-        self.assertEqual(score_move(words, 1).total, 8 + 1 + 1 + 1 + 1 + 1)
+        # H 8 + E + L + L + O + S = 15, no premium re-applied to old tiles
+        self.assertEqual(score_move(words, 1).total, 8 + 1 + 2 + 2 + 1 + 1)
 
     def test_blank_stays_worth_zero_when_boosted(self):
         board = Board()
@@ -318,12 +403,30 @@ class RoomFlowTests(unittest.TestCase):
         opp = room.players[1 - room.current]
         give(mover, list("HELLOXY"))
         result = move(room, mover, "HELLO", 7, 3)
-        self.assertEqual(result["score"], 24)
-        self.assertEqual(mover.score, 24)
+        self.assertEqual(result["score"], 28)
+        self.assertEqual(mover.score, 28)
         self.assertEqual(len(mover.rack), 7)  # drew 5 replacements
         self.assertEqual(len(room.bag), 86 - 5)
         self.assertIs(room.players[room.current], opp)
         self.assertEqual(room.board.get(7, 7).letter, "O")
+
+    def test_wild_bingo_is_the_main_word_doubled(self):
+        room, a, b = make_room("wild")
+        mover = room.players[room.current]
+        set_words(["RETINAS"])
+        give(mover, list("RETINAS"))
+        result = move(room, mover, "RETINAS", 7, 1)
+        base = (7 + 1) * 2  # T on the DL at (7,3), S on the centre DW
+        self.assertEqual((result["bingo"], result["bingo_bonus"]), (True, base))
+        self.assertEqual(result["score"], base * 2)
+
+    def test_classic_bingo_is_a_flat_fifty(self):
+        room, a, b = make_room("classic")
+        mover = room.players[room.current]
+        set_words(["RETINAS"])
+        give(mover, list("RETINAS"))
+        result = move(room, mover, "RETINAS", 7, 1)
+        self.assertEqual((result["bingo_bonus"], result["score"]), (50, 16 + 50))
 
     def test_invalid_word_rejected_in_strict_mode_and_pending_kept(self):
         room, a, b = make_room()
@@ -373,7 +476,7 @@ class RoomFlowTests(unittest.TestCase):
         self.assertEqual(result["score"], (0 + 1 + 1) * 2)
         self.assertTrue(room.board.get(7, 6).blank)
 
-    def test_pending_is_visible_to_opponent_without_rack_indexes(self):
+    def test_pending_tiles_are_private_to_their_owner(self):
         room, a, b = make_room()
         mover = room.players[room.current]
         opp = room.players[1 - room.current]
@@ -381,7 +484,7 @@ class RoomFlowTests(unittest.TestCase):
         room.place_tiles(mover, [{"rack_index": 0, "row": 7, "col": 7}])
         mine, theirs = room.view_for(mover), room.view_for(opp)
         self.assertIn("rack_index", mine["pending"][0])
-        self.assertNotIn("rack_index", theirs["pending"][0])
+        self.assertEqual(theirs["pending"], [])
         self.assertIsNotNone(mine["preview"])
         self.assertIsNone(theirs["preview"])
 
@@ -476,7 +579,7 @@ class RoomFlowTests(unittest.TestCase):
         give(mover, list("RETINAS"))
         result = move(room, mover, "RETINAS", 7, 1)
         self.assertTrue(result["bingo"])
-        self.assertGreaterEqual(result["score"], 50)
+        self.assertGreaterEqual(result["score"], 16)
 
 
 class ChallengeTests(unittest.TestCase):
@@ -616,13 +719,15 @@ class ModeTests(unittest.TestCase):
 
     def test_default_mode_is_wild_with_automatic_checking(self):
         room = Room("X")
-        self.assertEqual((room.mode, room.rules, room.length), ("wild", "strict", "full"))
+        self.assertEqual((room.mode, room.rules, room.length), ("wild", "strict", "medium"))
 
-    def test_wild_keeps_letter_boost_on_board(self):
+    def test_wild_keeps_bonuses_on_board(self):
         room, _ = self.play_first("wild")
-        self.assertEqual(room.board.get(7, 3).boost, 2)   # H on DL
-        self.assertEqual(room.board.get(7, 4).boost, 1)
-        self.assertEqual(room.view_for(room.players[0])["board"]["7,3"]["m"], 2)
+        # HELLO: H on a DL (x2) and the word covers the DW star (x2 for every letter).
+        self.assertEqual(room.board.get(7, 3).boost, 4)
+        self.assertEqual(room.board.get(7, 4).boost, 2)
+        self.assertEqual(room.board.get(7, 7).boost, 2)
+        self.assertEqual(room.view_for(room.players[0])["board"]["7,3"]["m"], 4)
 
     def test_classic_never_keeps_boost(self):
         room, _ = self.play_first("classic")
@@ -634,8 +739,10 @@ class ModeTests(unittest.TestCase):
         set_words(WORDS + ["HELLOS"])
         give(other, list("SQQQQQQ"))
         before = other.score
-        move(room, other, "S", 7, 8)  # HELLOS: H is now worth 8
-        self.assertEqual(other.score - before, 8 + 1 + 1 + 1 + 1 + 1)
+        move(room, other, "S", 7, 8)  # HELLOS: H, E, L, L, O keep their x4 / x2 values
+        self.assertEqual(other.score - before, 16 + 2 + 4 + 4 + 2 + 1)
+        self.assertEqual(room.board.get(7, 8).boost, 1)  # the added S is not multiplied
+        self.assertEqual(room.board.get(7, 3).boost, 4)  # and the old letters are not multiplied again
 
     def test_classic_extension_ignores_old_premium(self):
         room, mover = self.play_first("classic")
@@ -644,7 +751,21 @@ class ModeTests(unittest.TestCase):
         give(other, list("SQQQQQQ"))
         before = other.score
         move(room, other, "S", 7, 8)
-        self.assertEqual(other.score - before, 4 + 1 + 1 + 1 + 1 + 1)
+        self.assertEqual(other.score - before, 4 + 1 + 2 + 2 + 1 + 1)
+
+    def test_word_bonus_boosts_every_letter_of_the_word_permanently(self):
+        room, _, _ = make_room("wild")
+        mover = room.players[room.current]
+        give(mover, list("CATQQQQ"))
+        move(room, mover, "CAT", 7, 6)  # covers the centre DW
+        self.assertEqual([room.board.get(7, c).boost for c in (6, 7, 8)], [2, 2, 2])
+
+    def test_classic_word_bonus_is_not_kept(self):
+        room, _, _ = make_room("classic")
+        mover = room.players[room.current]
+        give(mover, list("CATQQQQ"))
+        move(room, mover, "CAT", 7, 6)
+        self.assertTrue(all(t.boost == 1 for t in room.board.grid.values()))
 
     def test_wild_rejects_invalid_word_and_shows_validity(self):
         room, a, b = make_room("wild")
@@ -671,7 +792,9 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(len(room.bag), 50 - 14)
         self.assertTrue(all(len(p.rack) == 7 for p in room.players))
         room.update_settings(a, length="medium")
-        self.assertEqual(len(room.bag), 75 - 14)
+        self.assertEqual(len(room.bag), 100 - 14)
+        room.update_settings(a, length="full")
+        self.assertEqual(len(room.bag), 150 - 14)
 
     def test_settings_apply_before_the_opponent_joins(self):
         set_words(WORDS)
@@ -680,7 +803,7 @@ class SettingsTests(unittest.TestCase):
         room.update_settings(p, mode="classic", length="medium")
         room.add_player("Bob")
         room.start()
-        self.assertEqual(len(room.bag), 75 - 14)
+        self.assertEqual(len(room.bag), 100 - 14)
         self.assertEqual(room.mode, "classic")
 
     def test_settings_lock_after_first_turn(self):
@@ -711,9 +834,151 @@ class SettingsTests(unittest.TestCase):
     def test_view_exposes_mode_and_length(self):
         room, a, b = make_room("classic")
         view = room.view_for(a)
-        self.assertEqual((view["mode"], view["length"], view["rules"]), ("classic", "full", "challenge"))
+        self.assertEqual((view["mode"], view["length"], view["rules"]), ("classic", "medium", "challenge"))
         self.assertEqual(CONFIG["modes"], ["wild", "classic"])
-        self.assertEqual(CONFIG["lengths"], {"short": 50, "medium": 75, "full": 100})
+        self.assertEqual(CONFIG["lengths"], {"short": 50, "medium": 100, "full": 150})
+        self.assertEqual((CONFIG["cols"], CONFIG["rows"]), (27, 19))
+        self.assertEqual(CONFIG["classic_bounds"], view["bounds"])  # classic room: fixed 15x15
+
+
+class MultiplayerTests(unittest.TestCase):
+    def lobby(self, count, mode="wild"):
+        set_words(WORDS)
+        room = Room("MULTI", mode=mode, max_players=count, rng=random.Random(4))
+        players = [room.add_player(name) for name in ("Ann", "Ben", "Cy", "Di")[:count]]
+        return room, players
+
+    def test_three_player_game_starts_when_full_and_turns_rotate(self):
+        room, players = self.lobby(3)
+        self.assertEqual(room.status, "waiting")
+        self.assertTrue(room.maybe_start())
+        self.assertEqual((room.status, len(room.players)), ("playing", 3))
+        self.assertTrue(all(len(p.rack) == 7 for p in players))
+        order = []
+        for _ in range(3):
+            order.append(room.current)
+            room.pass_turn(room.players[room.current])
+        self.assertEqual(sorted(order), [0, 1, 2])
+
+    def test_host_can_start_early_with_two_of_four(self):
+        room, players = self.lobby(2)
+        room.update_settings(players[0], max_players=4)
+        self.assertEqual(room.status, "waiting")
+        self.assertTrue(room.view_for(players[0])["can_start"])
+        self.assertFalse(room.view_for(players[1])["can_start"])
+        with self.assertRaisesRegex(GameError, "host"):
+            room.start_now(players[1])
+        room.start_now(players[0])
+        self.assertEqual((room.status, room.max_players), ("playing", 2))
+
+    def test_classic_is_two_players_only(self):
+        room, players = self.lobby(2)
+        with self.assertRaises(GameError):
+            room.update_settings(players[0], mode="classic", max_players=3)
+
+    def test_everyone_sees_only_their_own_rack_and_tentative_tiles(self):
+        room, players = self.lobby(3)
+        room.maybe_start()
+        mover = room.players[room.current]
+        give(mover, list("CATSEEE"))
+        room.place_tiles(mover, [{"rack_index": 0, "row": 7, "col": 7}])
+        for p in players:
+            view = room.view_for(p)
+            self.assertEqual(view["rack"], p.rack)
+            self.assertEqual(len(view["pending"]), 1 if p is mover else 0)
+            self.assertEqual(len(view["players"]), 3)
+
+    def test_scores_and_winner_with_three_players(self):
+        room, players = self.lobby(3)
+        room.maybe_start()
+        players[0].score, players[1].score, players[2].score = 10, 30, 20
+        for p in players:
+            p.rack = []
+        room._finish(out_seat=None)
+        self.assertEqual(room.winner, 1)
+        room.status = "playing"
+        room._finish(out_seat=None)
+
+    def test_wild_supports_many_players(self):
+        set_words(WORDS)
+        room = Room("BIG", max_players=12, rng=random.Random(5))
+        for i in range(12):
+            room.add_player(f"P{i}")
+        self.assertTrue(room.maybe_start())
+        self.assertTrue(all(len(p.rack) == 7 for p in room.players))
+        self.assertEqual(len(room.bag), 100 - 84)
+        seen = []
+        for _ in range(12):
+            seen.append(room.current)
+            room.pass_turn(room.players[room.current])
+        self.assertEqual(sorted(seen), list(range(12)))
+
+    def test_player_count_is_limited_by_the_bag(self):
+        with self.assertRaisesRegex(GameError, "not enough"):
+            Room("X", length="short", max_players=8)
+        room = Room("X", max_players=14)  # 98 of 100 tiles
+        with self.assertRaisesRegex(GameError, "not enough"):
+            room.update_settings(room.add_player("A"), length="medium", max_players=15)  # explicit: rejected
+        with self.assertRaises(GameError):
+            Room("X", max_players=17)
+        room.update_settings(room.players[0], length="full", max_players=16)
+        self.assertEqual(room.max_players, 16)
+
+    def test_full_room_rejects_a_fourth_player(self):
+        room, _ = self.lobby(3)
+        with self.assertRaisesRegex(GameError, "full"):
+            room.add_player("Zed")
+
+
+class ExpansionTests(unittest.TestCase):
+    def test_expansion_is_wild_only_by_default(self):
+        self.assertTrue(Room("X", mode="wild").auto_expand)
+        self.assertFalse(Room("X", mode="classic").auto_expand)
+        self.assertEqual(Room("X").expand_margin, 7)
+
+    def test_classic_is_the_standard_15x15_board(self):
+        room = Room("X", mode="classic")
+        b = room.board.bounds()
+        self.assertEqual(b, {"top": 0, "bottom": 14, "left": 0, "right": 14})
+        self.assertFalse(room.board.in_bounds(7, 15))
+        self.assertFalse(room.board.in_bounds(-1, 7))
+
+    def test_switching_mode_swaps_the_board_before_the_first_turn(self):
+        set_words(WORDS)
+        room = Room("X", rng=random.Random(1))
+        a = room.add_player("A")
+        self.assertEqual(room.board.bounds(), initial_bounds())
+        room.update_settings(a, mode="classic")
+        self.assertEqual(room.board.bounds()["right"], 14)
+        room.update_settings(a, mode="wild")
+        self.assertEqual(room.board.bounds(), initial_bounds())
+
+    def test_a_play_near_the_edge_grows_the_board_and_the_view_reports_it(self):
+        set_words(["CATS", "CAT", "ZA", "ZAX"])
+        room = Room("X", mode="wild", rng=random.Random(2))
+        a, b = room.add_player("A"), room.add_player("B")
+        room.start()
+        first = room.players[room.current]
+        before = dict(room.view_for(first)["bounds"])
+        self.assertEqual(before, initial_bounds())
+        # Put a word at the far right so that its last tile is within the margin of the edge.
+        room.board.place_all(word_placements("CAT", 7, 16))
+        mover = room.players[room.current]
+        give(mover, list("SQQQQQQ"))
+        move(room, mover, "S", 7, 19)
+        after = room.view_for(mover)["bounds"]
+        self.assertEqual(after["right"], 19 + 7)
+        self.assertEqual(after["left"], before["left"])
+        self.assertIn("The board expanded.", " ".join(h["text"] for h in room.history))
+        # The next player can already place a tile in the new area.
+        other = room.players[room.current]
+        self.assertTrue(room.board.in_bounds(7, 26))
+
+    def test_fixed_board_when_expansion_is_switched_off(self):
+        room = Room("X", auto_expand=False)
+        room.board.place_all(word_placements("CAT", 7, 18))
+        self.assertFalse(room.auto_expand)
+        self.assertEqual(room.board.bounds(), initial_bounds())
 
 
 class FakeClock:
@@ -865,7 +1130,7 @@ class MiscTests(unittest.TestCase):
         registry = RoomRegistry(max_rooms=2)
         room = registry.create()
         self.assertEqual(len(room.code), 8)
-        self.assertEqual((room.mode, room.length), ("wild", "full"))
+        self.assertEqual((room.mode, room.length), ("wild", "medium"))
         self.assertIs(registry.get(room.code.lower()), room)
         self.assertIsNone(registry.get("nope"))
         self.assertIsNone(registry.get(None))
@@ -985,6 +1250,117 @@ class LanguageTests(unittest.TestCase):
         room.update_settings(a, language="fi")
         self.assertEqual(room.language, "fi")
         self.assertTrue(all(t in TILE_DISTRIBUTIONS["fi"] for t in room.players[0].rack))
+
+
+class FollowUpTests(unittest.TestCase):
+    """Auto game length, shrinking after a won challenge, skipping offline players."""
+
+    def test_raising_the_player_count_raises_the_length_when_none_was_chosen(self):
+        room = Room("X", length="short", rng=random.Random(1))
+        host = room.add_player("A")
+        room.update_settings(host, max_players=8)  # 56 tiles do not fit in a 50-tile bag
+        self.assertEqual((room.length, room.max_players), ("medium", 8))
+        room.update_settings(host, max_players=15)  # 105 tiles
+        self.assertEqual(room.length, "full")
+        self.assertTrue(any("raised" in entry["text"] for entry in room.history))
+
+    def test_an_explicit_length_that_is_too_small_is_still_rejected(self):
+        room = Room("X", rng=random.Random(1))
+        host = room.add_player("A")
+        with self.assertRaisesRegex(GameError, "not enough"):
+            room.update_settings(host, length="short", max_players=8)
+        self.assertEqual((room.length, room.max_players), ("medium", 2))
+
+    def test_length_for_players(self):
+        from game.room import length_for_players
+        self.assertEqual([length_for_players(n, "short") for n in (2, 7, 8, 14, 15, 16)],
+                         ["short", "short", "medium", "medium", "full", "full"])
+        self.assertEqual(length_for_players(2), "medium")
+
+    def test_board_shrink_to_margin_restores_the_start_area(self):
+        board = Board()
+        start = board.bounds()
+        board.place_all([P(7, 20, "A"), P(7, 21, "T")])
+        self.assertTrue(board.expand_to_margin(7))
+        self.assertGreater(board.right, start["right"])
+        board.remove_all([P(7, 20, "A"), P(7, 21, "T")])
+        self.assertTrue(board.shrink_to_margin(7))
+        self.assertEqual(board.bounds(), start)
+        self.assertFalse(board.shrink_to_margin(7))
+
+    def test_board_keeps_growth_needed_by_remaining_tiles(self):
+        board = Board()
+        board.place_all([P(7, 7, "A"), P(7, 25, "T")])
+        board.expand_to_margin(7)
+        wide = board.bounds()
+        board.place_all([P(7, 26, "S")])
+        board.expand_to_margin(7)
+        board.remove_all([P(7, 26, "S")])
+        board.shrink_to_margin(7)
+        self.assertEqual(board.bounds(), wide)
+
+    def test_successful_challenge_undoes_board_growth(self):
+        set_words(WORDS)
+        room = Room("CH", mode="classic", auto_expand=True, rng=random.Random(3))
+        room.add_player("A"), room.add_player("B")
+        room.start()
+        before = room.board.bounds()
+        mover = room.players[room.current]
+        opp = room.players[1 - room.current]
+        give(mover, list("CTAXXXX"))
+        move(room, mover, "CTA", 7, 6)  # not a word, accepted in Classic until challenged
+        self.assertNotEqual(room.board.bounds(), before)
+        room.challenge(opp)
+        self.assertTrue(room.board.is_empty())
+        self.assertEqual(room.board.bounds(), before)
+
+    def make_three(self):
+        set_words(WORDS)
+        now = [1000.0]
+        room = Room("SK", max_players=3, rng=random.Random(6), clock=lambda: now[0])
+        players = [room.add_player(n) for n in ("Ann", "Ben", "Cy")]
+        for p in players:
+            room.player_joined(p, f"sid-{p.seat}")
+        room.maybe_start()
+        return room, players, now
+
+    def test_an_offline_player_can_be_skipped_after_the_grace_period(self):
+        from game.room import SKIP_GRACE
+        room, players, now = self.make_three()
+        away = room.players[room.current]
+        helper = room.players[(room.current + 1) % 3]
+        room.player_left(away)
+        self.assertIsNone(room.skippable_seat())
+        with self.assertRaisesRegex(GameError, "offline"):
+            room.skip_player(helper, away.seat)
+        self.assertFalse(room.expire_turn())  # nothing to announce yet
+        now[0] += SKIP_GRACE
+        self.assertEqual(room.skippable_seat(), away.seat)
+        self.assertTrue(room.expire_turn())   # tells the server to push the new "skippable" flag
+        self.assertFalse(room.expire_turn())  # ...only once
+        self.assertEqual(room.view_for(helper)["skippable"], away.seat)
+        self.assertIsNone(room.view_for(away)["skippable"])
+        with self.assertRaisesRegex(GameError, "yourself"):
+            room.skip_player(away, away.seat)
+        room.skip_player(helper, away.seat)
+        self.assertEqual(room.current, (away.seat + 1) % 3)
+        self.assertTrue(any("skipped" in entry["text"] for entry in room.history))
+
+    def test_a_connected_or_returning_player_cannot_be_skipped(self):
+        from game.room import SKIP_GRACE
+        room, players, now = self.make_three()
+        away = room.players[room.current]
+        helper = room.players[(room.current + 1) % 3]
+        room.player_left(away)
+        now[0] += SKIP_GRACE + 5
+        room.player_joined(away, "sid-new")  # came back in time
+        self.assertIsNone(room.skippable_seat())
+        with self.assertRaises(GameError):
+            room.skip_player(helper, away.seat)
+        other = players[(away.seat + 2) % 3]
+        room.player_left(other)  # someone offline who is not on turn is not skippable
+        now[0] += SKIP_GRACE + 5
+        self.assertIsNone(room.skippable_seat())
 
 
 if __name__ == "__main__":

@@ -11,7 +11,7 @@
     <h1 class="logo" aria-label="Scrabble">
       <span>S</span><span>C</span><span>R</span><span>A</span><span>B</span><span>B</span><span>L</span><span>E</span>
     </h1>
-    <p class="tagline">Two players, two browsers, one board.</p>
+    <p class="tagline">2 to 16 players, any browser, one board.</p>
 
     {% if error %}
       <div class="banner banner-error" role="alert">{{ error }}</div>
@@ -25,9 +25,13 @@
 
     <section class="card">
       <h2>New game</h2>
+      <label class="field create-field">
+        <span>Players</span>
+        <select id="create-players" aria-label="Number of players"></select>
+      </label>
       <button id="create-btn" class="btn btn-primary btn-wide" type="button">Create game</button>
       <p id="create-error" class="form-error" role="alert" hidden></p>
-      <p class="hint">You'll get a link to send to your opponent. Game mode (Wild or Classic) and length can be changed in the room before the first turn.</p>
+      <p class="hint">You'll get a link to send to your opponent. Game mode (Wild or Classic), length and timer can be changed in the room before the first turn; so can the number of players (Wild: up to 16; Classic is two-player).</p>
     </section>
 
     <section class="card">
