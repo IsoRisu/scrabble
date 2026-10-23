@@ -1184,6 +1184,69 @@
       return isFreeSquare(target.row, target.col, ignore);
     }
 
+
+    // ---------- hand letters dodge and wiggle when a dragged letter hovers close ----------
+    // Only transform-type properties are touched (translate, rotate, scale compose in that order).
+    const reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const reactState = new WeakMap();
+    let reactPoint = null;   // centre of the floating letter, or null when nothing is being dragged
+    let reactRaf = 0;
+    function reactFrame(now) {
+      reactRaf = 0;
+      const tiles = els.rack.querySelectorAll('.tile');
+      let busy = reactPoint !== null;
+      tiles.forEach((tile) => {
+        if (press && press.el === tile) return;
+        let st = reactState.get(tile);
+        if (!st) { st = { tx: 0, ty: 0, p: 0, phase: Math.random() * Math.PI * 2 }; reactState.set(tile, st); }
+        const size = tile.offsetWidth || 48;
+        const R = size * 1.2;
+        let targetP = 0;
+        let dx = 0;
+        let dy = 0;
+        if (reactPoint) {
+          const box = tile.getBoundingClientRect();   // includes the current offset, so remove it
+          const cx = box.left + box.width / 2 - st.tx;
+          const cy = box.top + box.height / 2 - st.ty;
+          let vx = cx - reactPoint.x;
+          let vy = cy - reactPoint.y;
+          const d = Math.hypot(vx, vy);
+          if (d < 0.001) { vx = 0; vy = -1; } else { vx /= d; vy /= d; }
+          const k = Math.max(0, 1 - d / R);
+          targetP = k * k * (3 - 2 * k);             // soft falloff
+          dx = vx * targetP * R * 0.55;
+          dy = vy * targetP * R * 0.55;
+        }
+        st.tx += (dx - st.tx) * 0.22;                // spring/lerp towards the target
+        st.ty += (dy - st.ty) * 0.22;
+        st.p += (targetP - st.p) * 0.22;             // amplitude ramps with proximity
+        if (st.p < 0.003 && !reactPoint && Math.abs(st.tx) < 0.05 && Math.abs(st.ty) < 0.05) {
+          st.tx = st.ty = st.p = 0;
+          tile.style.translate = tile.style.rotate = tile.style.scale = '';
+          return;
+        }
+        busy = true;
+        const wave = Math.sin(now / 1000 * Math.PI * 2 * 8 + st.phase);   // 8 Hz
+        const rot = reduceMotion ? 0 : st.p * 3 * wave;
+        const pulse = reduceMotion ? 1 : 1 + st.p * 0.04 * (0.5 + 0.5 * wave);
+        tile.style.translate = `${st.tx.toFixed(2)}px ${st.ty.toFixed(2)}px`;
+        tile.style.rotate = `${rot.toFixed(2)}deg`;
+        tile.style.scale = pulse.toFixed(4);
+      });
+      if (busy) reactRaf = requestAnimationFrame(reactFrame);
+    }
+    function reactTo(x, y) {
+      reactPoint = { x, y };
+      if (!reactRaf) reactRaf = requestAnimationFrame(reactFrame);
+    }
+    function reactClear() {
+      reactPoint = null;
+      for (const tile of els.rack.querySelectorAll('.tile')) {
+        tile.style.translate = tile.style.rotate = tile.style.scale = '';
+        reactState.delete(tile);
+      }
+    }
+
     function startPress(source, el, event) {
       if (!canPlace() || press) return;
       if (event.button !== undefined && event.button !== 0) return;
@@ -1220,6 +1283,7 @@
       if (press.dragging) {
         press.ghost.style.left = `${event.clientX}px`;
         press.ghost.style.top = `${aimY(event.clientY)}px`;
+        reactTo(event.clientX, aimY(event.clientY));
         const target = resolveTarget(event.clientX, event.clientY);
         setHighlight(dropIsValid(press.source, target) ? target.el : null);
         if (press.valueEl) {
@@ -1233,6 +1297,7 @@
       document.removeEventListener('pointermove', onPointerMove);
       document.removeEventListener('pointerup', onPointerUp);
       document.removeEventListener('pointercancel', onPointerCancel);
+      reactClear();   // rest positions before any drop logic measures the rack
       if (press) {
         if (press.ghost) press.ghost.remove();
         press.el.classList.remove('dragging');
@@ -1345,7 +1410,7 @@
     function setZoom(on, { center = true, persist = true } = {}) {
       els.boardScroll.classList.toggle('zoomed', on);
       els.zoom.setAttribute('aria-pressed', on ? 'true' : 'false');
-      els.zoom.textContent = on ? 'Fit board' : 'Zoom board';
+      els.zoom.textContent = 'Zoom board';
       if (persist) store.set(ZOOM_KEY, on ? '1' : '0');
       queueMinimap();
       if (on && center && cells.size) {
@@ -1353,48 +1418,141 @@
         centerBoardOn(cells.get(target ? `${target.row},${target.col}` : `${config.center[0]},${config.center[1]}`));
       }
     }
-    els.zoom.addEventListener('click', () => setZoom(!els.boardScroll.classList.contains('zoomed')));
+    // Zoom factor 1x = 44px squares. Range 0.2x - 8x, eased towards a target on every frame.
+    const ZBASE = 44;
+    const ZMIN = 0.2;
+    const ZMAX = 8;
+    const MIN_CELL = ZBASE * ZMIN;
+    const MAX_CELL = ZBASE * ZMAX;
+    const clampCell = (px) => Math.max(MIN_CELL, Math.min(MAX_CELL, px));
+    const currentCell = () => parseFloat(getComputedStyle(els.boardScroll).getPropertyValue('--zoom-cell')) || ZBASE;
+    const isZoomed = () => els.boardScroll.classList.contains('zoomed');
+    const fitCell = () => { const c = els.board.firstElementChild; return c ? c.offsetWidth : ZBASE; };
 
-    // Square size while zoomed (pinch changes it). The CSS default is --zoom-cell on :root.
-    const MIN_CELL = 22;
-    const MAX_CELL = 80;
-    const currentCell = () => parseFloat(getComputedStyle(els.boardScroll).getPropertyValue('--zoom-cell')) || 44;
-    let zoomRaf = 0;
-    let zoomReq = null;
-    function applyCellSize() {
-      zoomRaf = 0;
-      if (!zoomReq) return;
-      const { px, anchorX, anchorY } = zoomReq;
-      zoomReq = null;
+    let zCur = null;       // cell size currently applied (px)
+    let zTarget = null;    // cell size we are easing towards
+    let zAnchor = null;    // {x, y} relative to the board frame; this point stays put while zooming
+    let zRaf = 0;
+    let zSaveTimer = 0;
+    let zImmediate = false;
+
+    function writeCell(px) {
       const box = els.boardScroll;
-      const before = currentCell();
-      const next = Math.max(MIN_CELL, Math.min(MAX_CELL, px));
-      if (Math.abs(next - before) < 0.05) return;
-      // Measure the real size change (gaps and padding do not scale) so the anchor stays put.
+      const a = zAnchor || { x: box.clientWidth / 2, y: box.clientHeight / 2 };
       const oldW = box.scrollWidth;
       const oldH = box.scrollHeight;
-      box.style.setProperty('--zoom-cell', `${next.toFixed(2)}px`);
-      const rx = box.scrollWidth / oldW;
-      const ry = box.scrollHeight / oldH;
-      box.scrollLeft = (box.scrollLeft + anchorX) * rx - anchorX;
-      box.scrollTop = (box.scrollTop + anchorY) * ry - anchorY;
+      box.style.setProperty('--zoom-cell', `${px.toFixed(3)}px`);
+      // Measure the real size change (gaps and padding do not scale) so the anchor stays put.
+      box.scrollLeft = (box.scrollLeft + a.x) * (box.scrollWidth / oldW) - a.x;
+      box.scrollTop = (box.scrollTop + a.y) * (box.scrollHeight / oldH) - a.y;
     }
-    // Changes are coalesced to one layout per frame; this is what removes the stutter.
-    function setCellSize(px, anchorX, anchorY) {
-      zoomReq = { px, anchorX, anchorY };
-      if (!zoomRaf) zoomRaf = requestAnimationFrame(applyCellSize);
+    function zoomFrame() {
+      zRaf = 0;
+      if (zTarget === null) return;
+      if (zCur === null) zCur = currentCell();
+      // Ease in log space so zooming in and out feel equally fast.
+      const diff = Math.log(zTarget / zCur);
+      zCur = (zImmediate || Math.abs(diff) < 0.002) ? zTarget : zCur * Math.exp(diff * 0.28);
+      zImmediate = false;
+      writeCell(zCur);
+      syncZoomPopover();
+      if (zCur !== zTarget) { zRaf = requestAnimationFrame(zoomFrame); return; }
+      zTarget = null;
+      updateMinimap();
+      clearTimeout(zSaveTimer);
+      zSaveTimer = setTimeout(() => store.set(ZOOM_CELL_KEY, String(Math.round(currentCell()))), 200);
     }
-    // Ctrl/Cmd + wheel (and trackpad pinch) zooms the board on desktop.
+    // Ask for a new square size. `immediate` skips the easing (used by finger pinch, which already tracks the hand).
+    function setCellSize(px, anchorX, anchorY, immediate = false) {
+      if (!isZoomed()) {
+        // Entering zoom from the fit view: start from the size the squares have right now.
+        zCur = clampCell(fitCell());
+        els.boardScroll.style.setProperty('--zoom-cell', `${zCur}px`);
+        setZoom(true, { center: false });
+      }
+      zAnchor = anchorX === undefined ? null : { x: anchorX, y: anchorY };
+      zTarget = clampCell(px);
+      if (immediate) zImmediate = true;
+      if (!zRaf) zRaf = requestAnimationFrame(zoomFrame);
+    }
+    const zoomNow = () => (zTarget !== null ? zTarget : (isZoomed() ? currentCell() : fitCell())) / ZBASE;
+
+    // Ctrl/Cmd + wheel (and trackpad pinch, which browsers report as ctrl+wheel) zooms at the cursor.
     els.boardScroll.addEventListener('wheel', (event) => {
-      if (!(event.ctrlKey || event.metaKey)) return;
+      if (!event.ctrlKey) return;   // plain scrolling is left alone
       event.preventDefault();
-      if (!els.boardScroll.classList.contains('zoomed')) setZoom(true, { center: false });
+      let dy = event.deltaY;
+      if (event.deltaMode === 1) dy *= 16;                 // lines -> px
+      else if (event.deltaMode === 2) dy *= window.innerHeight;  // pages -> px
       const box = els.boardScroll.getBoundingClientRect();
-      const base = zoomReq ? zoomReq.px : currentCell();
-      setCellSize(base * Math.exp(-event.deltaY * 0.01), event.clientX - box.left, event.clientY - box.top);
-      clearTimeout(applyCellSize.t);
-      applyCellSize.t = setTimeout(() => { store.set(ZOOM_CELL_KEY, String(Math.round(currentCell()))); updateMinimap(); }, 200);
+      setCellSize(zoomNow() * ZBASE * Math.exp(-dy * 0.0015), event.clientX - box.left, event.clientY - box.top);
     }, { passive: false });
+
+    // ---------- zoom popover: a log-scale slider with a draggable ball ----------
+    let zPop = null;
+    function syncZoomPopover() {
+      if (!zPop) return;
+      const z = Math.max(ZMIN, Math.min(ZMAX, (zTarget !== null ? zCur || zTarget : (isZoomed() ? currentCell() : fitCell())) / ZBASE));
+      const t = Math.log(z / ZMIN) / Math.log(ZMAX / ZMIN);
+      zPop.ball.style.left = `${(t * 100).toFixed(2)}%`;
+      zPop.label.textContent = `${z.toFixed(z < 1 ? 2 : 1)}×`;
+    }
+    function closeZoomPopover() {
+      if (!zPop) return;
+      document.removeEventListener('pointerdown', zPop.onOutside, true);
+      document.removeEventListener('keydown', zPop.onKey, true);
+      zPop.root.remove();
+      zPop = null;
+      els.zoom.setAttribute('aria-expanded', 'false');
+    }
+    function openZoomPopover() {
+      if (zPop) { closeZoomPopover(); return; }
+      const label = h('span', { class: 'zp-label' });
+      const ball = h('div', { class: 'zp-ball', role: 'slider', tabindex: '0', 'aria-label': 'Board zoom',
+        'aria-valuemin': String(ZMIN), 'aria-valuemax': String(ZMAX) }, [label]);
+      const track = h('div', { class: 'zp-track' }, [ball]);
+      const fit = h('button', { class: 'btn btn-small', type: 'button', text: 'Fit board' });
+      const root = h('div', { class: 'zoom-pop', role: 'dialog', 'aria-label': 'Zoom' }, [
+        h('div', { class: 'zp-ends' }, [h('span', { text: `${ZMIN}×` }), h('span', { text: `${ZMAX}×` })]),
+        track, fit,
+      ]);
+      document.body.append(root);
+      const r = els.zoom.getBoundingClientRect();
+      const w = root.offsetWidth;
+      root.style.left = `${Math.max(8, Math.min(window.innerWidth - w - 8, r.left + r.width / 2 - w / 2))}px`;
+      root.style.top = `${Math.min(window.innerHeight - root.offsetHeight - 8, r.bottom + 8)}px`;
+
+      const toZoom = (clientX) => {
+        const tr = track.getBoundingClientRect();
+        const t = Math.max(0, Math.min(1, (clientX - tr.left) / tr.width));
+        return ZMIN * Math.pow(ZMAX / ZMIN, t);
+      };
+      const feed = (z) => setCellSize(z * ZBASE);   // anchors on the middle of the visible board
+      let dragging = false;
+      ball.addEventListener('pointerdown', (e) => {
+        dragging = true; ball.setPointerCapture(e.pointerId); ball.classList.add('drag'); e.preventDefault();
+      });
+      ball.addEventListener('pointermove', (e) => { if (dragging) feed(toZoom(e.clientX)); });
+      const stop = () => { dragging = false; ball.classList.remove('drag'); };
+      ball.addEventListener('pointerup', stop);
+      ball.addEventListener('pointercancel', stop);
+      track.addEventListener('pointerdown', (e) => { if (e.target === track) feed(toZoom(e.clientX)); });
+      ball.addEventListener('keydown', (e) => {
+        const k = { ArrowRight: 1.15, ArrowUp: 1.15, ArrowLeft: 1 / 1.15, ArrowDown: 1 / 1.15 }[e.key];
+        if (k) { e.preventDefault(); feed(zoomNow() * k); }
+      });
+      fit.addEventListener('click', () => { zTarget = null; setZoom(false); closeZoomPopover(); });
+
+      const onOutside = (e) => { if (!root.contains(e.target) && !els.zoom.contains(e.target)) closeZoomPopover(); };
+      const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); closeZoomPopover(); els.zoom.focus(); } };
+      document.addEventListener('pointerdown', onOutside, true);
+      document.addEventListener('keydown', onKey, true);
+      zPop = { root, ball, label, onOutside, onKey };
+      els.zoom.setAttribute('aria-expanded', 'true');
+      syncZoomPopover();
+    }
+    els.zoom.addEventListener('click', openZoomPopover);
+
     const savedCell = Number(store.get(ZOOM_CELL_KEY));
     if (savedCell >= MIN_CELL && savedCell <= MAX_CELL) els.boardScroll.style.setProperty('--zoom-cell', `${savedCell}px`);
 
@@ -1444,7 +1602,7 @@
       const box = els.boardScroll.getBoundingClientRect();
       const mx = (event.touches[0].clientX + event.touches[1].clientX) / 2 - box.left;
       const my = (event.touches[0].clientY + event.touches[1].clientY) / 2 - box.top;
-      if (Math.abs(scale - 1) > 0.01) setCellSize(pinch.cell * scale, mx, my);
+      if (Math.abs(scale - 1) > 0.01) setCellSize(pinch.cell * scale, mx, my, true);
     }, { passive: true });
     const endPinch = (event) => {
       if (pinch && event.touches.length < 2) {
