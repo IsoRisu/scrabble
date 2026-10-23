@@ -30,6 +30,13 @@
         <canvas id="minimap" class="minimap" width="132" height="96" hidden aria-label="Board overview: tap to jump"></canvas>
       </div>
 
+      <div class="controls">
+        <button id="btn-submit" class="btn btn-primary" type="button" disabled>Play word</button>
+        <button id="btn-recall" class="btn" type="button" disabled>Recall tiles</button>
+        <button id="btn-challenge" class="btn btn-danger" type="button" hidden>Challenge</button>
+        <button id="btn-resign" class="btn btn-danger" type="button" hidden>Resign</button>
+      </div>
+
       <div class="swap-row">
         <button id="btn-swap" class="btn" type="button" disabled>Swap&hellip;</button>
         <button id="btn-shuffle" class="btn" type="button" title="Shuffle the order of your rack (only you see it)">Shuffle rack</button>
@@ -40,14 +47,13 @@
 
       <div class="turn-panel">
         <div id="timer" class="timer" aria-label="Turn timer"></div>
+        <div class="timer-actions">
+          <button id="btn-timer-toggle" class="btn btn-small" type="button" hidden>Pause timer</button>
+          <button id="btn-skip-time" class="btn btn-small btn-danger" type="button" hidden>Skip player (time is up)</button>
+        </div>
         <button id="btn-pass" class="btn" type="button" disabled>Pass Turn</button>
       </div>
 
-      <div class="controls">
-        <button id="btn-submit" class="btn btn-primary" type="button" disabled>Play word</button>
-        <button id="btn-recall" class="btn" type="button" disabled>Recall tiles</button>
-        <button id="btn-challenge" class="btn btn-danger" type="button" hidden>Challenge</button>
-      </div>
     </section>
 
     <aside class="side-col">
@@ -55,6 +61,7 @@
       <button id="btn-settings" class="btn btn-wide" type="button">Edit Game Settings</button>
 
       <div class="bag">Tiles in bag: <b id="bag-count">&ndash;</b></div>
+      <div id="tracker" class="tracker" aria-label="Unseen tiles" hidden></div>
 
       <div id="share" class="share" hidden>
         <p>Waiting for players. Send them this link:</p>

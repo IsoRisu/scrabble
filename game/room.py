@@ -34,8 +34,21 @@ players (2-16): the game starts when that many have joined, or earlier when
 length  (tiles in the bag): short (50), medium (100, the standard set) or full (150).
 
 timer   (per-turn clock): off, or 30s / 60s / 90s / 2m / 3m / 5m for each turn.
-        When a player's clock runs out the server passes for them
-        (``Room.expire_turn``). The clock restarts on every turn.
+        The clock restarts on every turn.  Classic enforces it: when a player's clock runs
+        out the server passes for them (``Room.expire_turn``).  In Wild it is only a
+        reminder (as in Letter League): running out costs nothing, any player can pause or
+        resume it (``pause_timer`` / ``resume_timer``) and, once it reached zero, the host
+        may skip the player on turn (``skip_overtime``).
+
+resign  (``Room.resign``): a player can give up at any time.  Their tiles go back into the
+        bag and they leave the turn order; when one player is left that player wins.
+
+Tile tracker: every view carries ``tiles`` - the tiles the player has not seen (the bag
+        plus the other racks) with vowel / consonant / blank counts.  Once the bag is
+        empty that is exactly the opponents' tiles.
+
+Board layouts: Classic uses the standard premium squares; Wild uses the Letter League
+        layout from ``wild_rules.txt`` (no triple-word squares, see game/scoring.py).
 
 Staging (prep during the opponent's turn)
 -----------------------------------------
@@ -55,8 +68,8 @@ import time
 from dataclasses import dataclass, field
 
 from .board import BOARD_COLS, BOARD_ROWS, BOARD_SIZE, Board, GameError, Placement, classic_bounds, initial_bounds
-from .scoring import BINGO_BONUS, PERIOD, PREMIUM, letter_boost, score_move, word_factor
-from .tiles import BLANK, LANGUAGES, RACK_SIZE, TILE_DISTRIBUTIONS, TILE_VALUES, new_bag, tile_value
+from .scoring import BINGO_BONUS, PERIOD, PREMIUM, WILD_PREMIUM, letter_boost, score_move, word_factor
+from .tiles import BLANK, LANGUAGES, RACK_SIZE, TILE_DISTRIBUTIONS, TILE_VALUES, VOWELS, new_bag, tile_value
 
 ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no 0/O/1/I
 ROOM_CODE_LENGTH = 8
@@ -104,6 +117,7 @@ CONFIG = {
     "bingo_bonus": BINGO_BONUS,
     "center": [7, 7],
     "premiums": {f"{r},{c}": kind for (r, c), kind in PREMIUM.items()},
+    "wild_premiums": {f"{r},{c}": kind for (r, c), kind in WILD_PREMIUM.items()},
     "values": {lang: dict(values) for lang, values in TILE_VALUES.items()},
     "alphabets": {lang: sorted(t for t in dist if t != BLANK) for lang, dist in TILE_DISTRIBUTIONS.items()},
     "default_language": DEFAULT_LANGUAGE,
@@ -250,6 +264,7 @@ class Player:
     staged: list = field(default_factory=list)  # word prepared off-turn (see Room.stage_tiles); private
     staged_preview: dict = None
     stage_note: str = None  # one-line explanation after staged tiles were loaded or blocked
+    resigned: bool = False  # gave up: out of the turn order, tiles back in the bag
     # What this player's browser has already been sent (see app.push_all).
     sent_view: dict = None
     sent_version: int = 0
@@ -284,6 +299,7 @@ class Room:
         self.language = language
         self.clock = clock or time.time  # injectable so tests can move time
         self.turn_deadline = None  # clock() value at which the current turn expires
+        self.timer_paused_left = None  # seconds left on a paused (Wild) turn timer, else None
         self._clock_sig = None
         self._skippable_seen = None
         self.turns_played = 0  # plays, passes, swaps and challenges so far
@@ -299,6 +315,7 @@ class Room:
         self.scoreless_turns = 0
         self.last_move = None  # the play the opponent may still challenge
         self.awaiting_final = False  # challenge rules: a player went out and may be challenged
+        self.final_round = None  # wild: seats that still get one last turn after the bag ran out
         self.winner = None  # seat, "tie" or None
         self.final = None
         self.history = []
@@ -310,13 +327,31 @@ class Room:
         """How words are checked: 'strict' (automatic) or 'challenge'."""
         return MODE_RULES[self.mode]
 
+    def active_players(self):
+        """Players still in the game (everyone who has not resigned)."""
+        return [p for p in self.players if not p.resigned]
+
     @property
     def scoreless_limit(self):
         """Consecutive scoreless turns that end the game: three full rounds."""
-        return SCORELESS_TURN_LIMIT // 2 * max(len(self.players), 2)
+        return SCORELESS_TURN_LIMIT // 2 * max(len(self.active_players()), 2)
 
     def _next_seat(self, seat):
-        return (seat + 1) % len(self.players)
+        """The next seat in turn order, skipping players who resigned."""
+        count = len(self.players)
+        nxt = (seat + 1) % count
+        for _ in range(count):
+            if not self.players[nxt].resigned:
+                return nxt
+            nxt = (nxt + 1) % count
+        return (seat + 1) % count
+
+    def host_seat(self):
+        """The host: the first player who is still in the game."""
+        for p in self.players:
+            if not p.resigned:
+                return p.seat
+        return 0
 
     @property
     def auto_expand(self):
@@ -492,6 +527,7 @@ class Room:
     def _deal(self):
         """Fill the bag for the chosen length and deal fresh racks."""
         self.bag = new_bag(self.language, self.rng, LENGTHS[self.length])
+        self.final_round = None
         for player in self.players:
             self._clear_pending(player)
             self._clear_staged(player)
@@ -504,6 +540,7 @@ class Room:
         if sig == self._clock_sig:
             return
         self._clock_sig = sig
+        self.timer_paused_left = None  # every turn starts with a running clock
         seconds = TIMERS[self.timer]
         if self.status == "playing" and seconds:
             self.turn_deadline = self.clock() + seconds
@@ -520,6 +557,8 @@ class Room:
             self._skippable_seen = skippable
             if self.status != "playing" or self.turn_deadline is None:
                 return flipped
+            if self.mode == "wild":
+                return flipped  # Wild: the timer is only a reminder, running out costs nothing
             if self.clock() < self.turn_deadline:
                 return flipped
             player = self.players[self.current]
@@ -528,13 +567,65 @@ class Room:
             self._sync_clock()
             return True
 
+    # Wild: the turn timer is cosmetic.  Anybody can pause or resume it, and once it has
+    # run out the host may skip the player on turn.
+    def _require_wild_timer(self, player):
+        if self.status != "playing":
+            raise GameError("The game is not in progress.")
+        if self.mode != "wild":
+            raise GameError("The timer can only be paused in Wild games.")
+        if not TIMERS[self.timer]:
+            raise GameError("There is no timer in this game.")
+        if player.resigned:
+            raise GameError("You have resigned.")
+        self._sync_clock()
+
+    def pause_timer(self, player):
+        self._require_wild_timer(player)
+        if self.timer_paused_left is not None:
+            raise GameError("The timer is already paused.")
+        self.timer_paused_left = max(0.0, self.turn_deadline - self.clock())
+        self.turn_deadline = None
+        return {}
+
+    def resume_timer(self, player):
+        self._require_wild_timer(player)
+        if self.timer_paused_left is None:
+            raise GameError("The timer is not paused.")
+        self.turn_deadline = self.clock() + self.timer_paused_left
+        self.timer_paused_left = None
+        return {}
+
+    def timer_overtime(self):
+        """True while a Wild turn timer is running past zero."""
+        return (
+            self.status == "playing" and self.mode == "wild" and self.turn_deadline is not None
+            and self.clock() >= self.turn_deadline
+        )
+
+    def skip_overtime(self, requester):
+        """The host skips the player on turn after their (Wild) turn timer ran out."""
+        self._require_wild_timer(requester)
+        if requester.seat != self.host_seat():
+            raise GameError("Only the host can skip a player.")
+        if not self.timer_overtime():
+            raise GameError("That player's time is not up yet.")
+        away = self.players[self.current]
+        self._log("system", f"{requester.name} skipped {away.name}, whose time ran out.")
+        self.pass_turn(away)
+        return {}
+
     # ---- internal helpers --------------------------------------------
     def _draw(self, count):
         return [self.bag.pop() for _ in range(min(count, len(self.bag)))]
 
-    def _log(self, kind, text, seat=None):
+    def _log(self, kind, text, seat=None, words=None):
+        """Add a move-history line.  `words` (plays only) lets the client link each word to a definition."""
         self._history_count += 1
-        self.history.append({"n": self._history_count, "kind": kind, "seat": seat, "text": text})
+        entry = {"n": self._history_count, "kind": kind, "seat": seat, "text": text}
+        if words:
+            entry["words"] = list(words)
+        self.history.append(entry)
         del self.history[:-HISTORY_LIMIT]
 
     def _require_turn(self, player):
@@ -577,6 +668,16 @@ class Room:
             self._finish(out_seat=None)
         else:
             self.current = self._next_seat(player.seat)
+            self._advance_final_round(player)
+
+    def _advance_final_round(self, player):
+        """Wild: once the last tile is drawn everyone else gets one last turn, then the game ends."""
+        if self.final_round is None or self.status != "playing":
+            return
+        self.final_round.discard(player.seat)
+        if not self.final_round:
+            self._log("system", "Everyone has had their last turn.")
+            self._finish(out_seat=None)
 
     # ---- tentative placement -----------------------------------------
     def place_tiles(self, player, items):
@@ -605,6 +706,8 @@ class Room:
             raise GameError("Waiting for an opponent to join.")
         if self.status == "finished":
             raise GameError("The game is over.")
+        if player.resigned:
+            raise GameError("You have resigned.")
         if player.seat == self.current:
             raise GameError("It is your turn - place your tiles directly.")
         if not player.rack:
@@ -749,12 +852,12 @@ class Room:
         # words later are not multiplied.
         boosts = {}
         if self.mode == "wild":
-            boosts = {(p.row, p.col): letter_boost(p.row, p.col) for p in placements}
+            boosts = {(p.row, p.col): letter_boost(p.row, p.col, self.mode) for p in placements}
         self.board.place_all(placements, boosts)
         if self.mode == "wild":
             factors = {}
             for word in words:
-                factor = word_factor(word)
+                factor = word_factor(word, self.mode)
                 if factor > 1:
                     for cell in word.cells:
                         key = (cell.row, cell.col)
@@ -768,7 +871,9 @@ class Room:
         texts = [w.text for w in words]
         message = f"{player.name} played {', '.join(texts)} for {score.total}"
         message += f" (bingo, +{score.bonus}!)." if score.bingo else "."
-        self._log("play", message, seat=player.seat)
+        if score.total == 0:
+            message += " 0 points? 0 points!"  # Letter League easter egg: a word made only of blanks
+        self._log("play", message, seat=player.seat, words=texts)
         if grew:
             self._log("system", "The board expanded.")
 
@@ -793,6 +898,14 @@ class Room:
                 self._finish(out_seat=player.seat)
         else:
             self.current = self._next_seat(player.seat)
+            if self.mode == "wild":
+                if self.final_round is None and not self.bag and drawn:
+                    self.final_round = {p.seat for p in self.active_players() if p.seat != player.seat}
+                    self._log("system", "The last tile was taken - every other player gets one final turn.")
+                    if not self.final_round:
+                        self._finish(out_seat=None)
+                else:
+                    self._advance_final_round(player)
         return {"score": score.total, "words": texts, "bingo": score.bingo, "bingo_bonus": score.bonus}
 
     def pass_turn(self, player):
@@ -891,17 +1004,63 @@ class Room:
                 self.current = mover.seat
         return {"success": False, "invalid": []}
 
+    def resign(self, player):
+        """Give up (at any time during the game).
+
+        The player's tiles go back into the bag and they drop out of the turn order.  When only
+        one player is left that player wins; otherwise the game goes on without the quitter.
+        """
+        if self.status == "waiting":
+            raise GameError("The game has not started yet.")
+        if self.status == "finished":
+            raise GameError("The game is over.")
+        if player.resigned:
+            raise GameError("You have already resigned.")
+        was_on_turn = player.seat == self.current
+        player.resigned = True
+        self._clear_pending(player)
+        self._clear_staged(player)
+        if player.rack:
+            self.bag.extend(player.rack)
+            self.rng.shuffle(self.bag)
+            player.rack = []
+        self.turns_played += 1
+        self._log("system", f"{player.name} resigned.", seat=player.seat)
+        if len(self.active_players()) <= 1:
+            self._finish(out_seat=None, by_resignation=True)
+            return {}
+        if self.last_move is not None and self.last_move["seat"] == player.seat:
+            self.last_move = None  # nobody can challenge a play that has left the game
+        if was_on_turn:
+            self.awaiting_final = False
+            self.current = self._next_seat(player.seat)
+        if self.final_round is not None:
+            self.final_round.discard(player.seat)
+            if self.bag:  # tiles went back into the bag: not the last round any more
+                self.final_round = None
+            elif not self.final_round:
+                self._finish(out_seat=None)
+        return {}
+
     # ---- end of game -------------------------------------------------
-    def _finish(self, out_seat):
-        """End the game. `out_seat` is the player who emptied their rack, if any."""
+    def _finish(self, out_seat, by_resignation=False):
+        """End the game. `out_seat` is the player who emptied their rack, if any.
+
+        With `by_resignation` everybody else gave up: the last player standing wins and no
+        unplayed-tile adjustments are made.
+        """
         self.status = "finished"
         self.awaiting_final = False
+        self.turn_deadline = None
+        self.timer_paused_left = None
         for player in self.players:
             self._clear_pending(player)
             self._clear_staged(player)
         left = [sum(tile_value(t, self.language) for t in p.rack) for p in self.players]
         adjustments = [0] * len(self.players)
-        if out_seat is None:
+        if by_resignation:
+            pass
+        elif out_seat is None:
             for seat, points in enumerate(left):
                 adjustments[seat] = -points
         else:
@@ -912,8 +1071,12 @@ class Room:
         for player, delta in zip(self.players, adjustments):
             player.score += delta
 
-        best = max(p.score for p in self.players)
-        winners = [p.seat for p in self.players if p.score == best]
+        contenders = self.active_players() or self.players  # a resigned player cannot win
+        if by_resignation:
+            winners = [contenders[0].seat]
+        else:
+            best = max(p.score for p in contenders)
+            winners = [p.seat for p in contenders if p.score == best]
         self.winner = winners[0] if len(winners) == 1 else "tie"
         self.final = {
             "out_seat": out_seat,
@@ -921,7 +1084,9 @@ class Room:
             "adjustments": adjustments,
             "racks": [list(p.rack) for p in self.players],
         }
-        if self.winner == "tie":
+        if by_resignation:
+            result = f"{self.players[self.winner].name} wins - everyone else resigned!"
+        elif self.winner == "tie":
             tied = " and ".join(self.players[s].name for s in winners)
             result = "It's a tie!" if len(self.players) == 2 else f"It's a tie between {tied}!"
         else:
@@ -929,6 +1094,28 @@ class Room:
         self._log("system", f"Game over. {result}")
 
     # ---- views -------------------------------------------------------
+    def tile_tracker(self, player):
+        """The tiles `player` has not seen: the bag plus every other player's rack.
+
+        Once the bag is empty this is exactly the opponents' tiles.
+        """
+        unseen = list(self.bag)
+        for other in self.players:
+            if other is not player:
+                unseen.extend(other.rack)
+        letters = {}
+        for tile in unseen:
+            letters[tile] = letters.get(tile, 0) + 1
+        vowels = sum(n for t, n in letters.items() if t in VOWELS[self.language])
+        blanks = letters.get(BLANK, 0)
+        return {
+            "letters": letters,
+            "vowels": vowels,
+            "consonants": len(unseen) - vowels - blanks,
+            "blanks": blanks,
+            "total": len(unseen),
+        }
+
     def view_for(self, player):
         """Everything `player` is allowed to see, as plain JSON-able data."""
         self._sync_clock()
@@ -937,6 +1124,8 @@ class Room:
         ms_left = None
         if playing and self.turn_deadline is not None:
             ms_left = max(0, int((self.turn_deadline - self.clock()) * 1000))
+        elif playing and self.timer_paused_left is not None:
+            ms_left = int(self.timer_paused_left * 1000)
 
         # Tentative (unplayed) tiles are private: only the player who placed them sees them.
         pending = []
@@ -946,6 +1135,11 @@ class Room:
                     "row": p["row"], "col": p["col"], "letter": p["letter"], "blank": p["blank"],
                     "rack_index": p["rack_index"],
                 })
+
+        # The opponent sees WHERE tiles are being placed, never which letters.
+        opp_pending = []
+        if mover is not None and mover is not player:
+            opp_pending = [[p["row"], p["col"]] for p in mover.pending]
 
         last = None
         if self.last_move is not None:
@@ -977,6 +1171,9 @@ class Room:
             "expand_margin": self.expand_margin,
             "bounds": self.board.bounds(),
             "turn_ms_left": ms_left,
+            "timer_paused": playing and self.timer_paused_left is not None,
+            "host": self.host_seat(),
+            "tiles": self.tile_tracker(player),
             "settings_locked": self.settings_locked,
             "status": self.status,
             "you": player.seat,
@@ -988,12 +1185,15 @@ class Room:
                     "score": p.score,
                     "rack_count": len(p.rack),
                     "connected": p.connected,
+                    "resigned": p.resigned,
                 }
                 for p in self.players
             ],
             "bag_count": len(self.bag),
             "board": self.board.to_dict(),
             "pending": pending,
+            "opp_pending": opp_pending,
+            "final_round": sorted(self.final_round) if self.final_round is not None and playing else None,
             "preview": player.preview if mover is player else None,
             # Prepared off-turn; only ever included in the owner's own view.
             "staged": [

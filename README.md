@@ -17,10 +17,16 @@ on the server (the single source of truth), vanilla JS/HTML/CSS on the client
 - Play / Recall / Swap / Pass buttons, live scores, turn banner, move history.
 - Reconnect: the session token is kept in `localStorage`; reloading the page or
   dropping the connection puts you back in your seat.
+- **Resign** at any time (with a confirmation). Two players: the opponent wins. More: your tiles go back
+  into the bag and the others play on; the last player standing wins.
+- **Tile tracker**: bag size, vowels, consonants and blanks you have not seen, plus a per-letter list (the
+  bag plus your opponents' racks). Once the bag is empty it shows your opponents' exact tiles.
+- Words in the move list link to an online dictionary (Wiktionary, in the room's language).
 - Game settings, changeable by **either player inside the room until the first turn is played**
   (rooms are created with the defaults, **Wild** and **Full**):
   - **Mode**
-    - **Wild** (default) - every word is checked against the dictionary automatically
+    - **Wild** (default) - uses the Letter League board layout from `wild_rules.txt`: no triple word
+      squares (corners are plain, the four edge middles are triple letters). Every word is checked against the dictionary automatically
       (the live preview shows validity and invalid plays are rejected). A tile placed on a
       double or triple letter square **keeps its multiplier for the rest of the game**, so
       later words that reuse it score the improved value. Boosted tiles are shown with
@@ -29,9 +35,11 @@ on the server (the single source of truth), vanilla JS/HTML/CSS on the client
       placed). Any geometrically legal play is accepted and the opponent may `challenge_skip`
       it. A successful challenge removes the play; a failed one costs the challenger their turn.
   - **Length** - how many tiles are in the bag: Short (50), Medium (75) or Full (100).
-  - **Timer** - off (default) or 30s / 60s / 90s / 2m / 3m / 5m per turn. The server owns the
-    clock: when it runs out the player's turn is passed automatically (in Classic, running out of
-    time on a final play accepts it). The clock restarts every turn.
+  - **Timer** - off (default) or 30s / 60s / 90s / 2m / 3m / 5m per turn. The clock restarts every turn.
+    In **Classic** the server owns the clock: when it runs out the player's turn is passed automatically
+    (running out of time on a final play accepts it). In **Wild** the timer is only a reminder: nothing
+    happens at zero except a reminder tone for the player on turn; any player can pause or resume it
+    (pausing silences the tone), and once it reached zero the host may skip the player on turn.
 - **Edit Game Settings** button (side panel) opens the settings dialog; the **i** button in the top
   bar opens Game Info with the rules. Swap sits above the rack; Pass Turn sits under the timer.
 - The number on each tile is what it scores on the square it is on, so a tentative tile on a
@@ -98,11 +106,15 @@ internet access (see TODO).
 | `pass` | `{}` | Pass (or accept a final play in Classic mode). |
 | `swap_tiles` | `{indices: [...]}` | Needs at least 7 tiles in the bag. |
 | `challenge_skip` | `{}` | Classic mode only. |
+| `resign` | `{}` | Give up (any time while the game is running). |
+| `pause_timer` / `resume_timer` | `{}` | Wild only, any player, needs a timer. |
+| `skip_overtime` | `{}` | Wild only: the host skips the player on turn once the timer reached zero. |
 
 HTTP: `POST /create` takes an optional JSON body `{mode?, length?, timer?}` (same values as
 `update_settings`; defaults Wild / full / off; 400 on an unknown value) and returns `{code, path, url, mode, length, timer}`;
 `GET /api/room/<code>` returns `{exists, status, players, mode, length}`. Board cells in
 the state view are `{l: letter, b: is_blank, m: letter_boost}`, and the view carries
+`tiles` (unseen-tile tracker), `host`, `timer_paused`, a `resigned` flag per player,
 `mode`, `length`, `timer`, `turn_ms_left`, `rules` (`strict` for Wild, `challenge` for Classic) and `settings_locked`.
 
 Server to client: `state` (full snapshot `{version, config, state}`) and

@@ -183,6 +183,9 @@ input[type="text"], select {
   --cols: 27; --rows: 19;  /* set from the server's bounds in app.js; the board grows */
   display: grid; grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); grid-auto-rows: auto;
   gap: 3px; padding: 6px; width: 100%;
+  /* Fit the whole board in the window height so the buttons below stay in view. */
+  max-width: calc((100vh - 250px) * var(--cols) / var(--rows));
+  min-width: min(100%, 520px); margin: 0 auto;
   background: var(--bg-2); border-radius: var(--radius);
   box-shadow: 0 6px 0 rgba(185, 120, 99, .25);
   touch-action: manipulation;
@@ -190,14 +193,14 @@ input[type="text"], select {
 .cell {
   position: relative; display: flex; align-items: center; justify-content: center;
   background: var(--sq-normal); border-radius: 6px; min-width: 0; min-height: 0; aspect-ratio: 1 / 1;
-  font-size: calc(100cqw / var(--cols) * .3); font-weight: 800; color: var(--sq-ink);
+  font-size: max(9px, calc(100cqw / var(--cols) * .42)); font-weight: 900; color: rgba(74, 36, 22, .85);
   user-select: none; -webkit-user-select: none; line-height: 1;
 }
 .cell.tw { background: var(--sq-tw); }
 .cell.dw { background: var(--sq-dw); }
 .cell.tl { background: var(--sq-tl); }
 .cell.dl { background: var(--sq-dl); }
-.cell.center { font-size: calc(100cqw / var(--cols) * .55); }
+.cell.center { font-size: max(12px, calc(100cqw / var(--cols) * .6)); }
 .cell.drop-ok { outline: 3px solid var(--hl); outline-offset: -2px; z-index: 2; background-image: linear-gradient(rgba(164, 109, 249, .25), rgba(164, 109, 249, .25)); }
 .cell.can-drop { cursor: pointer; }
 /* While a tile is selected, mark every square it could go on (tap-to-place). */
@@ -218,8 +221,11 @@ input[type="text"], select {
 }
 .board .tile { position: absolute; inset: 0; width: auto; height: auto; font-size: calc(100cqw / var(--cols) * .56); border-radius: 6px; box-shadow: 0 2px 0 var(--tile-edge); }
 .tile .l { line-height: 1; }
-.tile .v { position: absolute; right: 9%; top: 5%; font-size: .38em; font-weight: 800; line-height: 1; }
+.tile .v { position: absolute; right: 7%; top: 3%; font-size: .38em; font-weight: 800; line-height: 1; }
 .tile.blank .l { color: var(--ink); text-shadow: none; }
+.board .tile .v { font-size: max(9px, .52em); text-shadow: none; }
+.board .tile .l { transform: translate(-8%, 8%); }
+.board .tile.boosted .v { color: var(--ink); }
 .tile.last { box-shadow: 0 2px 0 var(--tile-edge), 0 0 0 3px var(--hl); }
 .tile.pending { outline: 3px solid var(--hl); outline-offset: -1px; cursor: grab; touch-action: none; }
 .tile.pending.staged { outline: 3px dashed var(--accent-dark); }
@@ -233,6 +239,23 @@ input[type="text"], select {
 .tile.boosted.boost-hi { background: linear-gradient(#ffeaa8, var(--sq-dw)); box-shadow: 0 2px 0 #c99a1d; }
 .tile.boosted .v { font-weight: 800; }
 .tile .m { position: absolute; left: 8%; bottom: 4%; font-size: .34em; font-weight: 800; line-height: 1; color: var(--ink); }
+
+/* Bouncy placement: tiles spring into a square when put down or moved. */
+@keyframes tile-bounce {
+  0%   { transform: translateY(-14px) scale(1.18); }
+  40%  { transform: translateY(0) scale(.92, 1.06); }
+  60%  { transform: translateY(-5px) scale(1.04, .97); }
+  80%  { transform: translateY(0) scale(.99, 1.01); }
+  100% { transform: translateY(0) scale(1); }
+}
+.board .tile.pending:not(.selected), .board .tile.opp-ghost, .board .tile.last { animation: tile-bounce .5s cubic-bezier(.3, 1.3, .5, 1); }
+.board .tile.last { animation-duration: .45s; }
+/* What the opponent sees while you build your word: the outline, never the letter. */
+.board .tile.opp-ghost {
+  background: rgba(164, 109, 249, .18); box-shadow: none; border: 2px dashed var(--accent-dark); opacity: .9;
+}
+.rack .tile { transition: transform .18s cubic-bezier(.3, 1.6, .5, 1); }
+@media (prefers-reduced-motion: reduce) { .board .tile { animation: none !important; } }
 
 /* ---------- rack ---------- */
 .rack {
@@ -265,7 +288,8 @@ input[type="text"], select {
 .preview .pv-note { color: var(--accent-dark); font-weight: 800; font-size: 13px; margin-bottom: 2px; }
 .preview .pv-good { color: #1d7a3a; font-weight: 800; }
 
-.controls { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 10px; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 12px; }
+.controls .btn-primary { min-width: 140px; }
 
 /* ---------- side panel ---------- */
 .side-col {
@@ -366,7 +390,7 @@ input[type="text"], select {
   background: var(--bg-2);
 }
 .board-scroll.zoomed .board { touch-action: pan-x pan-y; /* the browser pans; app.js handles the pinch */ }
-.board-scroll.zoomed .board { width: calc(var(--zoom-cell) * var(--cols) + 3px * (var(--cols) - 1) + 12px); max-width: none; }
+.board-scroll.zoomed .board { width: calc(var(--zoom-cell) * var(--cols) + 3px * (var(--cols) - 1) + 12px); max-width: none; min-width: 0; margin: 0; will-change: width; }
 
 @media (max-width: 700px) {
   /* Keep the rack reachable while the board is zoomed or the page is scrolled. */
@@ -385,3 +409,22 @@ input[type="text"], select {
 
 .create-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; font-weight: 700; }
 .create-field select { width: 100%; }
+
+/* ---------- tile tracker, resign, timer controls, dictionary links ---------- */
+.tracker { background: var(--panel); border-radius: 14px; padding: 10px 12px; font-size: 13px; }
+.tr-counts { display: flex; flex-wrap: wrap; gap: 4px 12px; justify-content: center; font-weight: 700; color: var(--ink); }
+.tr-letters { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; margin-top: 8px; }
+.tr-chip {
+  display: inline-flex; align-items: baseline; gap: 1px; min-width: 24px; justify-content: center;
+  padding: 2px 5px; border-radius: 6px; background: var(--tile-1); color: #fff; font-weight: 800;
+  box-shadow: 0 1px 0 var(--tile-edge);
+}
+.tr-chip sub { font-size: 10px; font-weight: 700; opacity: .9; }
+.tr-note { margin-top: 6px; text-align: center; color: var(--muted); font-size: 12px; }
+.timer-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.timer-actions[hidden], .timer-actions:empty { display: none; }
+.btn-small { padding: 4px 10px; font-size: 13px; }
+.timer.paused { background: var(--muted); }
+.player-card.resigned { opacity: .55; }
+.history a.def-link { color: inherit; font-weight: 700; text-decoration: underline dotted; }
+.history a.def-link:hover { color: var(--accent-dark); }

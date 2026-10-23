@@ -21,13 +21,24 @@ _DOUBLE_LETTER = [
     (11, 0), (11, 7), (11, 14), (12, 6), (12, 8), (14, 3), (14, 11),
 ]
 
-# (row, col) -> "TW" | "DW" | "TL" | "DL"
+# (row, col) -> "TW" | "DW" | "TL" | "DL"   (the classic Scrabble layout)
 PREMIUM = {}
 for _kind, _squares in (
     ("TW", _TRIPLE_WORD), ("DW", _DOUBLE_WORD), ("TL", _TRIPLE_LETTER), ("DL", _DOUBLE_LETTER),
 ):
     for _square in _squares:
         PREMIUM[_square] = _kind
+
+# The Wild (Letter League) layout from wild_rules.txt: there are no triple word
+# squares.  The four edge-centre TW squares become triple letters and the corners are
+# plain squares; everything else is the classic pattern.
+WILD_PREMIUM = {}
+for _square, _kind in PREMIUM.items():
+    if _kind == "TW":
+        if _square in ((0, 0), (0, 14), (14, 0), (14, 14)):
+            continue
+        _kind = "TL"
+    WILD_PREMIUM[_square] = _kind
 
 
 # The premium pattern repeats every PERIOD squares in both directions (the classic
@@ -36,22 +47,26 @@ for _kind, _squares in (
 PERIOD = 14
 
 
-def premium_at(row, col):
-    """"TW" | "DW" | "TL" | "DL" for any square on the (unbounded) board, or None."""
-    return PREMIUM.get((row % PERIOD, col % PERIOD))
+def premium_at(row, col, mode="classic"):
+    """"TW" | "DW" | "TL" | "DL" for any square on the (unbounded) board, or None.
+
+    `mode` picks the layout: "classic" (standard Scrabble) or "wild" (no triple word squares).
+    """
+    table = WILD_PREMIUM if mode == "wild" else PREMIUM
+    return table.get((row % PERIOD, col % PERIOD))
 
 
-def letter_boost(row, col):
+def letter_boost(row, col, mode="classic"):
     """The letter multiplier a tile earns by landing on (row, col): 2, 3 or 1."""
-    return {"DL": 2, "TL": 3}.get(premium_at(row, col), 1)
+    return {"DL": 2, "TL": 3}.get(premium_at(row, col, mode), 1)
 
 
-def word_factor(word):
+def word_factor(word, mode="classic"):
     """The word multiplier earned by the new tiles of `word` (DW = 2, TW = 3, stacking)."""
     factor = 1
     for cell in word.cells:
         if cell.new:
-            premium = premium_at(cell.row, cell.col)
+            premium = premium_at(cell.row, cell.col, mode)
             if premium == "DW":
                 factor *= 2
             elif premium == "TW":
@@ -67,7 +82,7 @@ class MoveScore:
     bonus: int = 0  # what the bingo added on top of the word scores
 
 
-def score_word(word, lang="en"):
+def score_word(word, lang="en", mode="classic"):
     """Score one word. Premium squares only apply to tiles placed this turn.
 
     Tiles already on the board count at their face value times the boost they
@@ -78,13 +93,13 @@ def score_word(word, lang="en"):
     for cell in word.cells:
         value = 0 if cell.blank else tile_value(cell.letter, lang) * cell.boost
         if cell.new:
-            premium = premium_at(cell.row, cell.col)
+            premium = premium_at(cell.row, cell.col, mode)
             if premium == "DL":
                 value *= 2
             elif premium == "TL":
                 value *= 3
         letters += value
-    return letters * word_factor(word)
+    return letters * word_factor(word, mode)
 
 
 def score_move(words, tiles_placed, lang="en", mode="classic"):
@@ -94,7 +109,7 @@ def score_move(words, tiles_placed, lang="en", mode="classic"):
     scoring doubles the value of the main word (the first one) instead; the
     perpendicular words are unaffected.
     """
-    word_scores = tuple(score_word(word, lang) for word in words)
+    word_scores = tuple(score_word(word, lang, mode) for word in words)
     bingo = tiles_placed == RACK_SIZE
     bonus = 0
     if bingo:

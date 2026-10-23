@@ -11,7 +11,7 @@ from game.board import Board, GameError, Placement, initial_bounds  # noqa: E402
 from game.room import (  # noqa: E402
     CONFIG, Room, RoomRegistry, clean_name, diff_views, load_words, set_words,
 )
-from game.scoring import PREMIUM, premium_at, score_move  # noqa: E402
+from game.scoring import PREMIUM, WILD_PREMIUM, premium_at, score_move  # noqa: E402
 from game.tiles import BLANK, LANGUAGES, TILE_DISTRIBUTIONS, TILE_VALUES, new_bag  # noqa: E402
 
 TILE_DISTRIBUTION = TILE_DISTRIBUTIONS["en"]
@@ -1013,7 +1013,7 @@ class TimerTests(unittest.TestCase):
         self.assertEqual(room.view_for(a)["timer"], "30s")
 
     def test_expiry_passes_the_turn(self):
-        room, a, b, clock = timed_room("30s")
+        room, a, b, clock = timed_room("30s", mode="classic")  # Classic enforces the timer
         first = room.current
         clock.t += 29
         self.assertFalse(room.expire_turn())
@@ -1035,7 +1035,7 @@ class TimerTests(unittest.TestCase):
         self.assertFalse(room.expire_turn())
 
     def test_repeated_timeouts_end_the_game(self):
-        room, a, b, clock = timed_room("30s")
+        room, a, b, clock = timed_room("30s", mode="classic")
         for _ in range(6):
             clock.t += 31
             room.expire_turn()
@@ -1193,8 +1193,10 @@ class LanguageTests(unittest.TestCase):
     def test_unknown_or_unavailable_language_is_rejected(self):
         with self.assertRaises(GameError):
             Room("X", language="xx")
-        with self.assertRaises(GameError):
-            Room("X", language="sv")  # no data/sv.txt installed
+        from unittest import mock
+        with mock.patch.object(room_module, "dictionary_path", lambda lang: "/nonexistent/word-list.txt"):
+            with self.assertRaises(GameError):
+                Room("X", language="sv")  # no word list installed
         with self.assertRaises(GameError):
             RoomRegistry().create(language="klingon")
 
@@ -1361,6 +1363,314 @@ class FollowUpTests(unittest.TestCase):
         room.player_left(other)  # someone offline who is not on turn is not skippable
         now[0] += SKIP_GRACE + 5
         self.assertIsNone(room.skippable_seat())
+
+
+class RulesFileTests(unittest.TestCase):
+    """The layouts and rules written in wild_rules.txt / classic_rules.txt."""
+
+    @staticmethod
+    def board_from(filename, name):
+        path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), filename)
+        if not os.path.exists(path):
+            return None
+        with open(path, encoding="utf-8") as handle:
+            text = handle.read()
+        namespace = {}
+        exec(text[text.index(name + " = ["):], namespace)  # the board literal is valid Python
+        return namespace[name]
+
+    NAMES = {"": None, "DL": "DL", "TL": "TL", "DW": "DW", "TW": "TW", "2L": "DL", "3L": "TL", "2W": "DW", "3W": "TW"}
+
+    def check_layout(self, table, board):
+        for r in range(15):
+            for c in range(15):
+                cell = board[r][c]
+                expected = "DW" if cell == "\u2605" else self.NAMES[cell]
+                self.assertEqual(table.get((r, c)), expected, (r, c))
+
+    def test_wild_layout_matches_the_rules_file(self):
+        board = self.board_from("wild_rules.txt", "WILD_SCRABBLE_BOARD")
+        if board is None:
+            self.skipTest("wild_rules.txt not present")
+        self.check_layout(WILD_PREMIUM, board)
+
+    def test_classic_layout_matches_the_rules_file(self):
+        board = self.board_from("classic_rules.txt", "SCRABBLE_BOARD")
+        if board is None:
+            self.skipTest("classic_rules.txt not present")
+        self.check_layout(PREMIUM, board)
+
+    def test_wild_has_no_triple_word_squares_and_blank_corners(self):
+        self.assertNotIn("TW", WILD_PREMIUM.values())
+        self.assertIsNone(premium_at(0, 0, "wild"))
+        self.assertEqual(premium_at(0, 7, "wild"), "TL")
+        self.assertEqual(premium_at(7, 0, "wild"), "TL")
+        self.assertEqual(premium_at(0, 0, "classic"), "TW")
+        self.assertEqual(premium_at(0, 0), "TW")  # classic is the default layout
+        self.assertEqual(premium_at(-14, 0, "wild"), None)  # pattern repeats off the 15x15 grid
+        self.assertEqual(premium_at(-7, 7, "wild"), "DW")
+
+    def test_client_config_has_both_layouts(self):
+        self.assertEqual(len(CONFIG["wild_premiums"]), len(WILD_PREMIUM))
+        self.assertNotIn("TW", CONFIG["wild_premiums"].values())
+
+    def test_wild_centre_star_still_doubles_the_first_word(self):
+        room, a, b = make_room("wild")
+        mover = room.players[room.current]
+        # (7,7) is the centre; the TL on (7,3) triples its letter in Wild too.
+        give(mover, list("CATQQQQ"))
+        result = move(room, mover, "CAT", 7, 6)
+        self.assertEqual(result["score"], (3 + 1 + 1) * 2)  # centre DW only
+        room2, a2, b2 = make_room("wild")
+        mover2 = room2.players[room2.current]
+        give(mover2, list("CATQQQQ"))
+        move(room2, mover2, "CAT", 7, 7)  # C on the star, A (7,8), T (7,9): no premiums but the star
+        self.assertEqual(mover2.score, (3 + 1 + 1) * 2)
+
+    def test_wild_edge_square_is_a_triple_letter_not_a_triple_word(self):
+        from game.board import Word, WordCell
+        from game.scoring import score_word
+        cells = tuple(WordCell(0, c, ch, False, True) for c, ch in zip(range(6, 9), "CAT"))
+        # (0,7) holds the A: TL in Wild (3x), TW in Classic (word x3).
+        self.assertEqual(score_word(Word(cells), "en", "wild"), 3 + 1 * 3 + 1)
+        self.assertEqual(score_word(Word(cells), "en", "classic"), (3 + 1 + 1) * 3)
+
+    def test_zero_point_play_gets_the_easter_egg(self):
+        room, a, b = make_room("wild")
+        mover = room.players[room.current]
+        give(mover, [BLANK, BLANK, "Q", "Q", "Q", "Q", "Q"])
+        items = [
+            {"rack_index": 0, "row": 7, "col": 7, "letter": "G"},
+            {"rack_index": 1, "row": 7, "col": 8, "letter": "O"},
+        ]
+        room.place_tiles(mover, items)
+        result = room.submit(mover)
+        self.assertEqual(result["score"], 0)
+        self.assertIn("0 points? 0 points!", room.history[-1]["text"])
+
+    def test_normal_play_has_no_easter_egg(self):
+        room, a, b = make_room("wild")
+        mover = room.players[room.current]
+        give(mover, list("CATQQQQ"))
+        move(room, mover, "CAT", 7, 6)
+        self.assertNotIn("0 points", room.history[-1]["text"])
+
+    def test_history_play_entries_carry_their_words(self):
+        room, a, b = make_room("wild")
+        mover = room.players[room.current]
+        give(mover, list("CATQQQQ"))
+        move(room, mover, "CAT", 7, 6)
+        self.assertEqual(room.history[-1]["words"], ["CAT"])
+        self.assertNotIn("words", room.history[0])  # system lines carry none
+
+
+class TileTrackerTests(unittest.TestCase):
+    def test_tracker_is_bag_plus_opponent_racks(self):
+        room, a, b = make_room("wild")
+        seen = room.view_for(a)["tiles"]
+        self.assertEqual(seen["total"], len(room.bag) + len(b.rack))
+        self.assertEqual(sum(seen["letters"].values()), seen["total"])
+        self.assertEqual(seen["vowels"] + seen["consonants"] + seen["blanks"], seen["total"])
+
+    def test_tracker_never_reveals_the_players_own_rack(self):
+        room, a, b = make_room("wild")
+        room.bag.clear()
+        give(a, list("CATQQQQ"))
+        give(b, list("DOGZZZZ"))
+        mine = room.view_for(a)["tiles"]
+        self.assertEqual(mine["letters"], {"D": 1, "O": 1, "G": 1, "Z": 4})
+        theirs = room.view_for(b)["tiles"]
+        self.assertEqual(theirs["letters"], {"C": 1, "A": 1, "T": 1, "Q": 4})
+        self.assertEqual((mine["vowels"], mine["consonants"]), (1, 6))
+
+    def test_empty_bag_shows_the_opponents_exact_tiles(self):
+        room, a, b = make_room("wild")
+        room.bag.clear()
+        self.assertEqual(sorted(room.view_for(a)["tiles"]["letters"].items()),
+                         sorted((t, b.rack.count(t)) for t in set(b.rack)))
+
+    def test_blanks_are_counted_apart_and_finnish_vowels_include_umlauts(self):
+        set_words(WORDS)
+        room = Room("FI", language="fi", rng=random.Random(2))
+        a, b = room.add_player("A"), room.add_player("B")
+        room.start()
+        room.bag.clear()
+        give(b, ["Ä", "Ö", "K", BLANK, "Y", "S", "T"])
+        tiles = room.view_for(a)["tiles"]
+        self.assertEqual((tiles["vowels"], tiles["consonants"], tiles["blanks"]), (3, 3, 1))
+
+
+class ResignTests(unittest.TestCase):
+    def lobby(self, count):
+        set_words(WORDS)
+        room = Room("RESIGN", mode="wild", max_players=count, rng=random.Random(4))
+        players = [room.add_player(n) for n in ("Ann", "Ben", "Cy", "Di")[:count]]
+        room.maybe_start()
+        return room, players
+
+    def test_two_player_resign_gives_the_win_to_the_opponent(self):
+        room, (a, b) = self.lobby(2)
+        a.score, b.score = 99, 3  # the leader resigning still loses
+        room.resign(a)
+        self.assertEqual(room.status, "finished")
+        self.assertEqual(room.winner, b.seat)
+        self.assertEqual(room.final["winners"], [b.seat])
+        self.assertEqual(room.final["adjustments"], [0, 0])
+        self.assertIn("resigned", " ".join(h["text"] for h in room.history))
+
+    def test_resigning_returns_tiles_to_the_bag(self):
+        room, (a, b, c) = self.lobby(3)
+        bag_before = len(room.bag)
+        room.resign(b)
+        self.assertEqual(len(room.bag), bag_before + 7)
+        self.assertEqual(b.rack, [])
+        self.assertTrue(b.resigned)
+
+    def test_three_player_game_goes_on_without_the_quitter(self):
+        room, players = self.lobby(3)
+        room.current = 0
+        room.resign(players[1])  # not on turn
+        self.assertEqual(room.status, "playing")
+        room.pass_turn(players[0])
+        self.assertEqual(room.current, 2)  # Ben is skipped in the turn order
+        room.pass_turn(players[2])
+        self.assertEqual(room.current, 0)
+
+    def test_resigning_on_turn_passes_the_turn_on(self):
+        room, players = self.lobby(3)
+        room.current = 1
+        room.resign(players[1])
+        self.assertEqual(room.current, 2)
+        self.assertEqual(room.status, "playing")
+
+    def test_last_player_standing_wins_and_a_resigned_player_cannot(self):
+        room, players = self.lobby(3)
+        players[1].score = 500
+        room.resign(players[1])
+        room.resign(players[0])
+        self.assertEqual(room.status, "finished")
+        self.assertEqual(room.winner, players[2].seat)
+
+    def test_normal_ending_ignores_resigned_players_scores(self):
+        room, players = self.lobby(3)
+        players[2].score = 500
+        room.resign(players[2])
+        room.current = 0
+        room.bag.clear()
+        give(players[0], list("CAT"))
+        players[1].rack = ["Q"]
+        move(room, players[0], "CAT", 7, 6)
+        self.assertEqual(room.status, "finished")
+        self.assertEqual(room.winner, players[0].seat)
+
+    def test_resigned_players_cannot_act_again(self):
+        room, (a, b, c) = self.lobby(3)
+        room.resign(c)
+        with self.assertRaisesRegex(GameError, "already"):
+            room.resign(c)
+        with self.assertRaises(GameError):
+            room.stage_tiles(c, [])
+        self.assertTrue(room.view_for(a)["players"][c.seat]["resigned"])
+
+    def test_cannot_resign_before_the_start_or_after_the_end(self):
+        set_words(WORDS)
+        room = Room("RESIGN2", rng=random.Random(1))
+        a = room.add_player("A")
+        with self.assertRaisesRegex(GameError, "not started"):
+            room.resign(a)
+        b = room.add_player("B")
+        room.maybe_start()
+        room.resign(a)
+        with self.assertRaisesRegex(GameError, "over"):
+            room.resign(b)
+
+    def test_scoreless_limit_counts_only_active_players(self):
+        room, players = self.lobby(3)
+        self.assertEqual(room.scoreless_limit, 9)
+        room.resign(players[0])
+        self.assertEqual(room.scoreless_limit, 6)
+
+    def test_classic_resign_ends_the_game_even_while_a_final_play_awaits(self):
+        room, a, b = make_room("classic")
+        mover = room.players[room.current]
+        opp = room.players[1 - room.current]
+        room.bag.clear()
+        give(mover, list("CAT"))
+        move(room, mover, "CAT", 7, 6)
+        self.assertTrue(room.awaiting_final)
+        room.resign(opp)
+        self.assertEqual(room.status, "finished")
+        self.assertEqual(room.winner, mover.seat)
+
+
+class WildTimerTests(unittest.TestCase):
+    def test_wild_timer_running_out_costs_nothing(self):
+        room, a, b, clock = timed_room("30s", mode="wild")
+        first = room.current
+        clock.t += 500
+        self.assertFalse(room.expire_turn())
+        self.assertEqual(room.current, first)
+        self.assertEqual(room.view_for(a)["turn_ms_left"], 0)
+        self.assertEqual(room.scoreless_turns, 0)
+
+    def test_pause_freezes_and_resume_continues(self):
+        room, a, b, clock = timed_room("60s")
+        clock.t += 20
+        room.pause_timer(b)  # anyone can pause, on turn or not
+        clock.t += 300
+        view = room.view_for(a)
+        self.assertTrue(view["timer_paused"])
+        self.assertEqual(view["turn_ms_left"], 40000)
+        with self.assertRaisesRegex(GameError, "already"):
+            room.pause_timer(a)
+        room.resume_timer(a)
+        self.assertFalse(room.view_for(a)["timer_paused"])
+        clock.t += 10
+        self.assertEqual(room.view_for(a)["turn_ms_left"], 30000)
+        with self.assertRaisesRegex(GameError, "not paused"):
+            room.resume_timer(a)
+
+    def test_a_new_turn_starts_with_a_running_fresh_clock(self):
+        room, a, b, clock = timed_room("60s")
+        room.pause_timer(a)
+        mover = room.players[room.current]
+        room.pass_turn(mover)
+        room.touch()
+        view = room.view_for(a)
+        self.assertFalse(view["timer_paused"])
+        self.assertEqual(view["turn_ms_left"], 60000)
+
+    def test_only_the_host_can_skip_and_only_after_time_is_up(self):
+        room, a, b, clock = timed_room("30s")
+        host, guest = room.players[0], room.players[1]
+        self.assertEqual(room.view_for(guest)["host"], 0)
+        with self.assertRaisesRegex(GameError, "not up"):
+            room.skip_overtime(host)
+        clock.t += 31
+        self.assertTrue(room.timer_overtime())
+        with self.assertRaisesRegex(GameError, "host"):
+            room.skip_overtime(guest)
+        on_turn = room.current
+        room.skip_overtime(host)
+        self.assertNotEqual(room.current, on_turn)
+        self.assertIn("time ran out", room.history[-2]["text"])
+
+    def test_paused_timer_cannot_be_skipped_and_no_timer_means_no_pause(self):
+        room, a, b, clock = timed_room("30s")
+        clock.t += 31
+        room.pause_timer(a)
+        with self.assertRaisesRegex(GameError, "not up"):
+            room.skip_overtime(room.players[0])
+        room2, a2, b2, _ = timed_room("off")
+        with self.assertRaisesRegex(GameError, "no timer"):
+            room2.pause_timer(a2)
+
+    def test_classic_timer_cannot_be_paused(self):
+        room, a, b, clock = timed_room("30s", mode="classic")
+        with self.assertRaisesRegex(GameError, "Wild"):
+            room.pause_timer(a)
+        with self.assertRaisesRegex(GameError, "Wild"):
+            room.skip_overtime(room.players[0])
 
 
 if __name__ == "__main__":

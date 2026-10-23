@@ -212,7 +212,7 @@ _clock_started = False
 
 
 def _clock_loop():
-    """Once a second, pass for any player whose turn timer has run out."""
+    """Once a second, pass for any Classic player whose turn timer has run out (Wild timers only remind)."""
     while True:
         socketio.sleep(1)
         for room in REGISTRY.rooms():
@@ -355,6 +355,30 @@ def on_skip_player(room, player, data):
     if not isinstance(seat, int) or isinstance(seat, bool):
         raise GameError("Choose a player to skip.")
     return room.skip_player(player, seat)
+
+
+@game_action("resign")
+def on_resign(room, player, data):
+    """Give up the game. Two players: the opponent wins. More: the game goes on without you."""
+    return room.resign(player)
+
+
+@game_action("pause_timer")
+def on_pause_timer(room, player, data):
+    """Freeze the turn timer (Wild only, any player)."""
+    return room.pause_timer(player)
+
+
+@game_action("resume_timer")
+def on_resume_timer(room, player, data):
+    """Let a paused turn timer run again (Wild only, any player)."""
+    return room.resume_timer(player)
+
+
+@game_action("skip_overtime")
+def on_skip_overtime(room, player, data):
+    """The host skips the player on turn once their timer has run out (Wild only)."""
+    return room.skip_overtime(player)
 
 
 @game_action("place_tiles")

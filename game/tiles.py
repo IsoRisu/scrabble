@@ -80,6 +80,16 @@ TILE_VALUES = {
 
 LANGUAGES = tuple(TILE_DISTRIBUTIONS)
 
+# Letters counted as vowels by the tile tracker (every other letter is a consonant;
+# blanks are counted on their own).
+VOWELS = {
+    "en": "AEIOU",
+    "fr": "AEIOU",
+    "es": "AEIOU",
+    "fi": "AEIOUYÄÖ",
+    "sv": "AEIOUYÅÄÖ",
+}
+
 
 def alphabet(lang="en"):
     """The letters (no blank) a tile can stand for in this language."""

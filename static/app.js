@@ -163,13 +163,15 @@
       players: $('players'), history: $('history'), bag: $('bag-count'), conn: $('conn'),
       toast: $('toast'), share: $('share'), shareUrl: $('share-url'), modalRoot: $('modal-root'),
       submit: $('btn-submit'), recall: $('btn-recall'), swap: $('btn-swap'),
-      pass: $('btn-pass'), challenge: $('btn-challenge'), modeLabel: $('mode-label'),
+      pass: $('btn-pass'), challenge: $('btn-challenge'),
+      resign: $('btn-resign'), timerToggle: $('btn-timer-toggle'), skipTime: $('btn-skip-time'), tracker: $('tracker'), modeLabel: $('mode-label'),
       settingsBtn: $('btn-settings'), info: $('btn-info'), timer: $('timer'),
       boardScroll: $('board-scroll'), zoom: $('btn-zoom'), start: $('btn-start'),
       shuffle: $('btn-shuffle'), minimap: $('minimap'),
     };
     let cells = new Map();   // "row,col" -> element (absolute board coordinates, may be negative)
     let builtBounds = null;  // bounds the current DOM grid was built for
+    let builtMode = null;    // scoring mode the grid's premium squares were drawn for
 
     // Display text for the game settings (the server owns the actual rules).
     const MODE_INFO = {
@@ -192,12 +194,17 @@
     const timerShort = (key) => (key && key !== 'off' ? ` · ${key} turns` : '');
     // The premium pattern repeats every `premium_period` squares, so the board can grow forever.
     const mod = (n, m) => ((n % m) + m) % m;
+    // Wild has its own layout (no triple word squares); Classic is the standard Scrabble board.
+    const currentMode = () => (S && S.mode) || document.body.dataset.mode;
     const premiumAt = (row, col) => {
       const period = config.premium_period || 14;
-      return config.premiums[`${mod(row, period)},${mod(col, period)}`];
+      const layout = currentMode() === 'wild' && config.wild_premiums ? config.wild_premiums : config.premiums;
+      return layout[`${mod(row, period)},${mod(col, period)}`];
     };
     const letterMult = (row, col) => ({ DL: 2, TL: 3 }[premiumAt(row, col)] || 1);
     let deadlineAt = null;   // local time (ms) at which the current turn's clock runs out
+    let pausedLeft = null;   // ms left on a paused (Wild) timer, else null
+    let lastBeep = 0;
     const modeLabel = (mode) => (MODE_INFO[mode] ? MODE_INFO[mode].label : mode);
     const lengthText = (length) => {
       const tiles = config && config.lengths ? config.lengths[length] : null;
@@ -210,7 +217,7 @@
     const canEdit = () => myTurn() && !S.awaiting_final;
     // Off-turn players can stage (prepare) a word; it is private and loads into the real
     // tentative placement when their turn starts. Both modes share the same placing UI.
-    const canStage = () => isPlaying() && !myTurn() && S.rack.length > 0;
+    const canStage = () => isPlaying() && !myTurn() && S.rack.length > 0 && !(S.players[S.you] && S.players[S.you].resigned);
     const canPlace = () => canEdit() || canStage();
     const opponent = () => (S ? S.players.find((p) => p.seat !== S.you) || null : null);
     const tileValue = (letter) => {
@@ -406,6 +413,7 @@
         }
       }
       builtBounds = { ...b };
+      builtMode = currentMode();
       if (prev) {
         // Growing at the top/left shifts everything down/right: keep the same squares in view.
         const sample = els.board.firstElementChild;
@@ -434,7 +442,7 @@
     // ---------- rendering ----------
     function render() {
       if (!S || !config) return;
-      if (boundsChanged(builtBounds, boundsOf())) {
+      if (boundsChanged(builtBounds, boundsOf()) || builtMode !== currentMode()) {
         const first = !builtBounds;
         buildBoard();
         if (first && els.boardScroll.classList.contains('zoomed')) centerBoardOn(cells.get(`${config.center[0]},${config.center[1]}`));
@@ -451,6 +459,7 @@
       renderHistory();
       renderPreview();
       renderControls();
+      renderTracker();
       els.bag.textContent = String(S.bag_count);
       renderSettingsButton();
       renderTimer();
@@ -558,7 +567,7 @@
           h('h3', { text: 'Setup' }),
           h('p', { text: 'Open Edit Game Settings to choose the length, scoring and timer for your game (before the first turn).' }),
           h('ul', {},
-            bullet('Wild (default): ', 'letters affected by a bonus keep it permanently: a letter on a double/triple letter square, and every letter of a word that hit a double/triple word square. Multiplied letters are coloured in and keep their higher value when anyone reuses them, but letters added to the word later are not multiplied. A bingo (all 7 tiles) doubles the main word. Words are checked automatically as you place tiles. Up to 16 players (a longer game gives everyone a full rack).'),
+            bullet('Wild (default): ', 'there are no triple word squares (the corners are plain and the edge middles are triple letters). Letters affected by a bonus keep it permanently: a letter on a double/triple letter square, and every letter of a word that hit a double/triple word square. Multiplied letters are coloured in and keep their higher value when anyone reuses them, but letters added to the word later are not multiplied. A bingo (all 7 tiles) doubles the main word. Words are checked automatically as you place tiles. Up to 16 players (a longer game gives everyone a full rack).'),
             bullet('Classic: ', 'bonuses only count on the turn they are covered, and a bingo is a flat 50 points, as in standard Scrabble. Classic uses the traditional challenge system and is for two players.')),
           h('h3', { text: 'How to play' }),
           h('ol', {},
@@ -566,6 +575,9 @@
             h('li', { text: 'Plan ahead: while your opponent is playing you can already stage a word. It is checked and scored live, only you can see it, and it loads onto the board when your turn starts so you can review it and press Play word.' }),
             h('li', { text: 'Rearrange your rack by dragging tiles left or right. Only you see your rack and the tiles you have placed but not yet played.' }),
             h('li', { text: "Can't form a word? Swap tiles with the Swap button above your letters, or press Pass Turn under the timer." }),
+            h('li', { text: 'Resign any time with the Resign button (after confirming). With two players your opponent wins; with more, your tiles go back into the bag and the others play on.' }),
+            h('li', { text: 'The tile tracker lists every tile you have not seen: the bag plus your opponents’ racks. Once the bag is empty it shows your opponents’ exact tiles. Click a word in the move list to look it up in an online dictionary.' }),
+            h('li', { text: 'Wild timer: it only reminds you. Anyone can pause or resume it, and once it reaches zero the host may skip the player on turn. Classic enforces the timer.' }),
             h('li', { text: 'Winning: the player with the most points at the end of the game wins.' })),
           h('div', { class: 'actions' }, h('button', { class: 'btn btn-primary', type: 'button', text: 'Got it', onclick: () => api.close() })),
         );
@@ -581,12 +593,54 @@
       const box = els.timer;
       if (!S) return;
       box.className = 'timer';
-      if (S.status !== 'playing') { box.textContent = S.status === 'finished' ? 'Game over' : ''; return; }
-      if (!S.timer || S.timer === 'off' || deadlineAt === null) { box.textContent = 'No timer'; box.classList.add('off'); return; }
-      const left = deadlineAt - Date.now();
-      box.textContent = `⏱ ${fmtClock(left)}`;
-      if (myTurn()) box.classList.add('mine');
-      if (left <= 10000) box.classList.add('low');
+      if (S.status !== 'playing') {
+        box.textContent = S.status === 'finished' ? 'Game over' : '';
+        els.timerToggle.hidden = true;
+        els.skipTime.hidden = true;
+        return;
+      }
+      const wild = S.mode === 'wild';
+      const hasTimer = S.timer && S.timer !== 'off' && (deadlineAt !== null || pausedLeft !== null);
+      els.timerToggle.hidden = !(wild && hasTimer);
+      els.skipTime.hidden = true;
+      if (!hasTimer) { box.textContent = 'No timer'; box.classList.add('off'); return; }
+      const paused = pausedLeft !== null;
+      const left = paused ? pausedLeft : deadlineAt - Date.now();
+      const over = wild && !paused && left <= 0;
+      els.timerToggle.textContent = paused ? 'Resume timer' : 'Pause timer';
+      if (paused) {
+        box.textContent = `⏸ ${fmtClock(left)}`;
+        box.classList.add('paused');
+      } else if (over) {
+        box.textContent = '⏱ 0:00 – time is up';
+        box.classList.add('low');
+        // Wild timers only remind: nothing happens automatically.  The host may skip the player,
+        // and pausing the timer silences the reminder.
+        els.skipTime.hidden = S.host !== S.you;
+        if (myTurn() && Date.now() - lastBeep > 3000) { lastBeep = Date.now(); beep(); }
+      } else {
+        box.textContent = `⏱ ${fmtClock(left)}`;
+        if (myTurn()) box.classList.add('mine');
+        if (left <= 10000) box.classList.add('low');
+      }
+    }
+
+    // A short reminder tone for an overrun turn (browsers may block it until the page was clicked).
+    let audioCtx = null;
+    function beep() {
+      try {
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (!Ctx) return;
+        audioCtx = audioCtx || new Ctx();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.frequency.value = 660;
+        gain.gain.value = 0.05;
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.25);
+      } catch (_) { /* sound is optional */ }
     }
     setInterval(renderTimer, 250);
 
@@ -601,6 +655,9 @@
         text = S.winner === 'tie' ? "Game over – it's a tie!"
           : (S.winner === S.you ? 'Game over – you win!' : `Game over – ${S.players[S.winner].name} wins!`);
         cls = 'over';
+      } else if (S.players[S.you] && S.players[S.you].resigned) {
+        text = 'You resigned. You can keep watching the game.';
+        cls = 'theirs';
       } else if (S.awaiting_final) {
         if (myTurn()) { text = `${opp.name} played their last tile. Challenge it, or pass to accept.`; cls = 'alert'; }
         else { text = `You played your last tile. Waiting for ${opp.name} to challenge or accept…`; cls = 'theirs'; }
@@ -632,6 +689,7 @@
         }
       }
 
+      const oppSet = new Set(!canEdit() && Array.isArray(S.opp_pending) ? S.opp_pending.map(([r, c]) => `${r},${c}`) : []);
       const placing = canPlace() && (local.selected !== null || local.selectedBoard !== null);
       const sb = local.selectedBoard;
       for (let r = builtBounds.top; r <= builtBounds.bottom; r += 1) {
@@ -652,6 +710,8 @@
             info = mine.get(key);
             sel = !!sb && sb.row === r && sb.col === c;
             sig = `p${staging ? 's' : ''}:${S.mode}:${info.letter}:${info.blank ? 1 : 0}:${info.boost}:${sel ? 1 : 0}`;
+          } else if (oppSet.has(key)) {
+            sig = 'o';   // opponent is placing a tile here: outline only, no letter
           } else {
             sig = 'e';
           }
@@ -659,7 +719,9 @@
           if (cell.dataset.sig === sig) continue;
           cell.dataset.sig = sig;
           cell.replaceChildren();
-          if (info) {
+          if (sig === 'o') {
+            cell.append(h('div', { class: 'tile opp-ghost', 'aria-label': 'Opponent is placing a tile here' }));
+          } else if (info) {
             const tile = makeTile(info.letter, info.blank, sel ? `${kind} selected` : kind, info.boost || 1, S.mode === 'wild');
             if (kind.startsWith('pending')) {
               tile.setAttribute('title', (staging ? 'Staged for your next turn. ' : '')
@@ -740,11 +802,12 @@
         const active = S.status === 'playing' && S.current === p.seat;
         const minis = h('span', { class: 'mini-tiles' });
         for (let i = 0; i < p.rack_count; i += 1) minis.append(h('i'));
-        const card = h('div', { class: `player-card${active ? ' active' : ''}` },
+        const card = h('div', { class: `player-card${active ? ' active' : ''}${p.resigned ? ' resigned' : ''}` },
           h('div', { class: 'name' },
             h('span', { class: `dot${p.connected ? ' on' : ''}`, title: p.connected ? 'Online' : 'Offline' }),
             h('span', { class: 'nm', text: p.name }),
-            p.seat === S.you ? h('span', { class: 'you', text: 'you' }) : null),
+            p.seat === S.you ? h('span', { class: 'you', text: 'you' }) : null,
+            p.resigned ? h('span', { class: 'you', text: 'resigned' }) : null),
           h('div', { class: 'score', text: String(p.score) }),
           h('div', { class: 'racks' }, minis, `${p.rack_count} tile${p.rack_count === 1 ? '' : 's'}`));
         card.style.setProperty('--seat-hue', String(seatHue(p.seat)));
@@ -765,11 +828,36 @@
       }
     }
 
+    // Words of a play are links to an online dictionary (Wiktionary has every bundled language).
+    function historyNodes(entry) {
+      const text = entry.text;
+      const words = entry.words || [];
+      if (!words.length) return [text];
+      const lang = (S && S.language) || 'en';
+      const out = [];
+      let cursor = 0;
+      let search = text.indexOf(' played ');
+      search = search < 0 ? 0 : search + 8;
+      for (const word of words) {
+        const at = text.indexOf(word, search);
+        if (at < 0) continue;
+        out.push(text.slice(cursor, at));
+        out.push(h('a', {
+          class: 'def-link', target: '_blank', rel: 'noopener noreferrer', title: `Look up ${word}`,
+          href: `https://${lang}.wiktionary.org/wiki/${encodeURIComponent(word.toLowerCase())}`, text: word,
+        }));
+        cursor = at + word.length;
+        search = cursor;
+      }
+      out.push(text.slice(cursor));
+      return out;
+    }
+
     function renderHistory() {
       els.history.replaceChildren();
       for (const entry of [...S.history].reverse()) {
         const seated = Number.isInteger(entry.seat) && entry.seat >= 0;
-        const li = h('li', { class: `${entry.kind}${seated ? ' seat' : ''}`, text: entry.text });
+        const li = h('li', { class: `${entry.kind}${seated ? ' seat' : ''}` }, historyNodes(entry));
         if (seated) li.style.setProperty('--seat-hue', String(seatHue(entry.seat)));
         els.history.append(li);
       }
@@ -845,6 +933,32 @@
       els.pass.textContent = S.awaiting_final ? 'Accept & end game' : 'Pass Turn';
       els.challenge.hidden = S.mode !== 'classic';
       els.challenge.disabled = !(S.can_challenge && !busy);
+      const me = S.players[S.you];
+      els.resign.hidden = !(S.status === 'playing' && me && !me.resigned);
+      els.resign.disabled = busy;
+    }
+
+    // ---------- tile tracker: what has not been played and is not on my rack ----------
+    function renderTracker() {
+      const box = els.tracker;
+      box.replaceChildren();
+      const t = S.tiles;
+      if (!t || S.status === 'waiting') { box.hidden = true; return; }
+      box.hidden = false;
+      const count = (label, value) => h('span', { class: 'tr-count' }, `${label} `, h('b', { text: String(value) }));
+      box.append(h('div', { class: 'tr-counts' },
+        count('Tile bag', S.bag_count), count('Vowels', t.vowels), count('Consonants', t.consonants),
+        t.blanks ? count('Blanks', t.blanks) : null));
+      const order = Object.keys(t.letters).filter((l) => l !== '?').sort((a, b) => a.localeCompare(b));
+      const chips = h('div', { class: 'tr-letters' });
+      for (const letter of order) {
+        chips.append(h('span', { class: 'tr-chip', title: `${t.letters[letter]} unseen` }, letter, h('sub', { text: String(t.letters[letter]) })));
+      }
+      if (t.blanks) chips.append(h('span', { class: 'tr-chip', title: `${t.blanks} unseen` }, '␣', h('sub', { text: String(t.blanks) })));
+      box.append(chips);
+      box.append(h('div', { class: 'tr-note', text: S.bag_count === 0 && S.status === 'playing'
+        ? 'The bag is empty: these are your opponents’ exact tiles.'
+        : 'Unseen tiles: the bag plus your opponents’ racks.' }));
     }
 
     // ---------- server -> client ----------
@@ -865,6 +979,12 @@
       }
     }
 
+    function syncDeadline() {
+      const ms = S.turn_ms_left;
+      if (ms === null || ms === undefined) { deadlineAt = null; pausedLeft = null; return; }
+      if (S.timer_paused) { deadlineAt = null; pausedLeft = ms; } else { deadlineAt = Date.now() + ms; pausedLeft = null; }
+    }
+
     function onState(msg) {
       config = msg.config;
       S = msg.state;
@@ -873,7 +993,7 @@
       local.inflight = 0;
       local.selected = null;
       local.pending = serverPending();
-      deadlineAt = S.turn_ms_left === null || S.turn_ms_left === undefined ? null : Date.now() + S.turn_ms_left;
+      syncDeadline();
       render();
     }
 
@@ -889,9 +1009,7 @@
         }
       }
       version = msg.version;
-      if ('turn_ms_left' in msg.patch) {
-        deadlineAt = S.turn_ms_left === null ? null : Date.now() + S.turn_ms_left;
-      }
+      if ('turn_ms_left' in msg.patch || 'timer_paused' in msg.patch) syncDeadline();
       syncLocalFromServer();
       render();
       if (S.stage_note && S.stage_note !== prevNote) toast(S.stage_note);
@@ -1241,17 +1359,42 @@
     const MIN_CELL = 22;
     const MAX_CELL = 80;
     const currentCell = () => parseFloat(getComputedStyle(els.boardScroll).getPropertyValue('--zoom-cell')) || 44;
-    function setCellSize(px, anchorX, anchorY) {
+    let zoomRaf = 0;
+    let zoomReq = null;
+    function applyCellSize() {
+      zoomRaf = 0;
+      if (!zoomReq) return;
+      const { px, anchorX, anchorY } = zoomReq;
+      zoomReq = null;
       const box = els.boardScroll;
       const before = currentCell();
       const next = Math.max(MIN_CELL, Math.min(MAX_CELL, px));
-      if (Math.abs(next - before) < 0.1) return;
-      box.style.setProperty('--zoom-cell', `${next.toFixed(1)}px`);
-      // Keep the point under the fingers where it was.
-      const ratio = next / before;
-      box.scrollLeft = (box.scrollLeft + anchorX) * ratio - anchorX;
-      box.scrollTop = (box.scrollTop + anchorY) * ratio - anchorY;
+      if (Math.abs(next - before) < 0.05) return;
+      // Measure the real size change (gaps and padding do not scale) so the anchor stays put.
+      const oldW = box.scrollWidth;
+      const oldH = box.scrollHeight;
+      box.style.setProperty('--zoom-cell', `${next.toFixed(2)}px`);
+      const rx = box.scrollWidth / oldW;
+      const ry = box.scrollHeight / oldH;
+      box.scrollLeft = (box.scrollLeft + anchorX) * rx - anchorX;
+      box.scrollTop = (box.scrollTop + anchorY) * ry - anchorY;
     }
+    // Changes are coalesced to one layout per frame; this is what removes the stutter.
+    function setCellSize(px, anchorX, anchorY) {
+      zoomReq = { px, anchorX, anchorY };
+      if (!zoomRaf) zoomRaf = requestAnimationFrame(applyCellSize);
+    }
+    // Ctrl/Cmd + wheel (and trackpad pinch) zooms the board on desktop.
+    els.boardScroll.addEventListener('wheel', (event) => {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      event.preventDefault();
+      if (!els.boardScroll.classList.contains('zoomed')) setZoom(true, { center: false });
+      const box = els.boardScroll.getBoundingClientRect();
+      const base = zoomReq ? zoomReq.px : currentCell();
+      setCellSize(base * Math.exp(-event.deltaY * 0.01), event.clientX - box.left, event.clientY - box.top);
+      clearTimeout(applyCellSize.t);
+      applyCellSize.t = setTimeout(() => { store.set(ZOOM_CELL_KEY, String(Math.round(currentCell()))); updateMinimap(); }, 200);
+    }, { passive: false });
     const savedCell = Number(store.get(ZOOM_CELL_KEY));
     if (savedCell >= MIN_CELL && savedCell <= MAX_CELL) els.boardScroll.style.setProperty('--zoom-cell', `${savedCell}px`);
 
@@ -1301,7 +1444,7 @@
       const box = els.boardScroll.getBoundingClientRect();
       const mx = (event.touches[0].clientX + event.touches[1].clientX) / 2 - box.left;
       const my = (event.touches[0].clientY + event.touches[1].clientY) / 2 - box.top;
-      setCellSize(pinch.cell * scale, mx, my);
+      if (Math.abs(scale - 1) > 0.01) setCellSize(pinch.cell * scale, mx, my);
     }, { passive: true });
     const endPinch = (event) => {
       if (pinch && event.touches.length < 2) {
@@ -1429,6 +1572,27 @@
       const question = S.awaiting_final ? 'Accept your opponent’s last play and end the game?' : 'Pass your turn?';
       if (!window.confirm(question)) return;
       act('pass', {}, () => { local.pending = []; local.selected = null; });
+    });
+
+    els.resign.addEventListener('click', () => {
+      if (!S || S.status !== 'playing') return;
+      const question = S.players.length === 2
+        ? 'Resign the game? Your opponent wins.'
+        : 'Resign the game? Your tiles go back into the bag and the others play on.';
+      if (!window.confirm(question)) return;
+      act('resign', {}, () => { local.pending = []; local.selected = null; toast('You resigned.'); });
+    });
+
+    els.timerToggle.addEventListener('click', () => {
+      if (!S) return;
+      act(S.timer_paused ? 'resume_timer' : 'pause_timer', {}, () => {});
+    });
+
+    els.skipTime.addEventListener('click', () => {
+      if (!S || !isPlaying()) return;
+      const name = S.players[S.current] ? S.players[S.current].name : 'this player';
+      if (!window.confirm(`Skip ${name}'s turn?`)) return;
+      act('skip_overtime', {}, () => toast('Turn skipped.'));
     });
 
     els.challenge.addEventListener('click', () => {
