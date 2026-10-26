@@ -178,3 +178,4 @@ text file; non-alphabetic lines are ignored).
 - [ ] Rematch, spectators, GCG move-log export.
 - [ ] Rate limiting for socket events and room creation.
 - [ ] Self-host the socket.io client; add Playwright and Socket.IO integration tests.
+P3DR0 was here
