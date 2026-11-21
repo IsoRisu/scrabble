@@ -25,9 +25,41 @@
 
     <section class="card">
       <h2>New game</h2>
-      <button id="create-btn" class="btn btn-primary btn-wide" type="button">Create game</button>
+      <form id="create-form">
+        <div class="field">
+          <label for="create-mode"><span>Scoring mode</span>
+            <select id="create-mode">
+              <option value="wild" selected>Wild (automatic check, grows board)</option>
+              <option value="classic">Classic (traditional Scrabble rules)</option>
+            </select>
+          </label>
+        </div>
+        <div class="field">
+          <label for="create-length"><span>Game length</span>
+            <select id="create-length">
+              <option value="short">Short (50 tiles)</option>
+              <option value="medium" selected>Medium (100 tiles)</option>
+              <option value="full">Full (150 tiles)</option>
+            </select>
+          </label>
+        </div>
+        <div class="field">
+          <label for="create-timer"><span>Turn timer</span>
+            <select id="create-timer">
+              <option value="off" selected>No timer</option>
+              <option value="30s">30 seconds</option>
+              <option value="60s">60 seconds</option>
+              <option value="90s">90 seconds</option>
+              <option value="2m">2 minutes</option>
+              <option value="3m">3 minutes</option>
+              <option value="5m">5 minutes</option>
+            </select>
+          </label>
+        </div>
+        <button id="create-btn" class="btn btn-primary btn-wide" type="submit">Create game</button>
+      </form>
       <p id="create-error" class="form-error" role="alert" hidden></p>
-      <p class="hint">You'll get a link to send to friends. Room size is automatic and seamless in Wild mode (up to 16 players). Game mode, length and timer can be changed in the room before the first turn.</p>
+      <p class="hint">You'll get a link to send to friends. Game mode, length and timer can also be changed in the room before the first turn.</p>
     </section>
 
     <section class="card">
