@@ -7,21 +7,11 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body data-page="game" data-room="{{ code }}" data-mode="{{ mode }}" data-length="{{ length }}" data-timer="{{ timer }}">
-  <header class="topbar">
-    <a class="brand" href="/">SCRABBLE</a>
-    <div class="roominfo">
-      Room <code id="room-code">{{ code }}</code>
-      <span class="sep">&middot;</span>
-      <span id="mode-label"></span>
-    </div>
-    <button id="btn-info" class="icon-btn" type="button" title="Game info" aria-label="Game info">i</button>
-    <span id="conn" class="conn conn-wait" title="Connection status">connecting&hellip;</span>
-  </header>
-
-  <div id="turn-banner" class="turn-banner" role="status" aria-live="polite">Connecting&hellip;</div>
   <div id="toast" class="toast" role="alert" hidden></div>
 
-  <main class="layout scalable-layout">
+  <!-- Full screen game viewport -->
+  <main class="game-viewport">
+    <!-- Board section takes the entire screen -->
     <section class="board-col">
       <div class="board-wrap">
         <div id="board-scroll" class="board-scroll">
@@ -29,54 +19,73 @@
         </div>
         <canvas id="minimap" class="minimap" width="132" height="96" hidden aria-label="Board overview: tap to jump"></canvas>
       </div>
-
-      <div class="controls">
-        <button id="btn-submit" class="btn btn-primary" type="button" disabled>Play word</button>
-        <button id="btn-recall" class="btn" type="button" disabled>Recall tiles</button>
-        <button id="btn-challenge" class="btn btn-danger" type="button" hidden>Challenge</button>
-        <button id="btn-resign" class="btn btn-danger" type="button" hidden>Resign</button>
-      </div>
-
-      <div class="swap-row">
-        <button id="btn-swap" class="btn" type="button" disabled>Swap&hellip;</button>
-        <button id="btn-shuffle" class="btn" type="button" title="Shuffle the order of your rack (only you see it)">Shuffle rack</button>
-        <button id="btn-zoom" class="btn zoom-btn" type="button" aria-pressed="false">Zoom board</button>
-      </div>
-      <div id="rack" class="rack" aria-label="Your tile rack"></div>
-      <div id="preview" class="preview" aria-live="polite"></div>
-
-      <div class="turn-panel">
-        <div id="timer" class="timer" aria-label="Turn timer"></div>
-        <div class="timer-actions">
-          <button id="btn-timer-toggle" class="btn btn-small" type="button" hidden>Pause timer</button>
-          <button id="btn-skip-time" class="btn btn-small btn-danger" type="button" hidden>Skip player (time is up)</button>
-        </div>
-        <button id="btn-pass" class="btn" type="button" disabled>Pass Turn</button>
-      </div>
-
     </section>
 
-    <aside class="side-col">
+    <!-- Floating UI Overlays -->
+    <header class="floating-topbar">
+      <a class="brand" href="/">SCRABBLE</a>
+      <div class="roominfo">
+        Room <code id="room-code">{{ code }}</code>
+        <span class="sep">&middot;</span>
+        <span id="mode-label"></span>
+      </div>
+      <span id="conn" class="conn conn-wait" title="Connection status">conn&hellip;</span>
+      <button id="btn-cog" class="icon-btn cog-btn" type="button" title="Settings & Options" aria-label="Settings and Options">&#9881;</button>
+      <button id="btn-info" class="icon-btn" type="button" title="Game info" aria-label="Game info">i</button>
+    </header>
+
+    <div id="turn-banner" class="turn-banner floating-turn" role="status" aria-live="polite">Connecting&hellip;</div>
+
+    <!-- Floating Top-Right / Side Overlays -->
+    <div class="floating-overlay-panel top-right-overlay">
       <div id="players" class="players"></div>
-      <button id="btn-settings" class="btn btn-wide" type="button">Edit Game Settings</button>
+      <div class="bag-float">Tiles in bag: <b id="bag-count">&ndash;</b></div>
+      <div id="timer" class="timer" aria-label="Turn timer"></div>
+      <div class="timer-actions">
+        <button id="btn-timer-toggle" class="btn btn-small" type="button" hidden>Pause</button>
+        <button id="btn-skip-time" class="btn btn-small btn-danger" type="button" hidden>Skip</button>
+      </div>
+      <button id="btn-challenge" class="btn btn-danger btn-small" type="button" hidden>Challenge</button>
+    </div>
 
-      <div class="bag">Tiles in bag: <b id="bag-count">&ndash;</b></div>
-      <div id="tracker" class="tracker" aria-label="Unseen tiles" hidden></div>
+    <!-- Floating Bottom Rack & Action Controls Overlay -->
+    <div class="floating-bottom-overlay">
+      <div id="preview" class="preview" aria-live="polite"></div>
+      <div id="rack" class="rack" aria-label="Your tile rack"></div>
+      <div class="controls">
+        <button id="btn-submit" class="btn btn-primary" type="button" disabled>Play word</button>
+        <button id="btn-recall" class="btn" type="button" disabled>Recall</button>
+        <button id="btn-swap" class="btn" type="button" disabled>Swap&hellip;</button>
+        <button id="btn-shuffle" class="btn" type="button" title="Shuffle the order of your rack">Shuffle</button>
+        <button id="btn-zoom" class="btn zoom-btn" type="button" aria-pressed="false">Zoom</button>
+        <button id="btn-pass" class="btn" type="button" disabled>Pass</button>
+        <button id="btn-resign" class="btn btn-danger" type="button" hidden>Resign</button>
+      </div>
+    </div>
 
-      <div id="share" class="share" hidden>
-        <p>Waiting for players. Send them this link:</p>
-        <div class="row">
-          <input id="share-url" type="text" readonly aria-label="Shareable link">
-          <button id="share-copy" class="btn" type="button">Copy</button>
+    <!-- Hidden / Cog Settings Overlay Container -->
+    <div id="settings-overlay" class="settings-overlay modal-backdrop" hidden>
+      <div class="modal settings-modal">
+        <h2>Game Settings & History</h2>
+        <button id="btn-settings" class="btn btn-wide" type="button">Edit Game Settings</button>
+        <div id="tracker" class="tracker" aria-label="Unseen tiles" hidden></div>
+        <div id="share" class="share" hidden>
+          <p>Waiting for players. Send them this link:</p>
+          <div class="row">
+            <input id="share-url" type="text" readonly aria-label="Shareable link">
+            <button id="share-copy" class="btn" type="button">Copy</button>
+          </div>
+          <button id="btn-start" class="btn btn-primary btn-wide" type="button" hidden style="margin-top: 8px">Start now</button>
         </div>
-        <button id="btn-start" class="btn btn-primary btn-wide" type="button" hidden style="margin-top: 8px">Start now</button>
+        <div class="history-wrap">
+          <h3>Moves</h3>
+          <ol id="history" class="history"></ol>
+        </div>
+        <div class="actions">
+          <button id="btn-close-settings" class="btn btn-primary" type="button">Close</button>
+        </div>
       </div>
-
-      <div class="history-wrap">
-        <h3>Moves</h3>
-        <ol id="history" class="history"></ol>
-      </div>
-    </aside>
+    </div>
   </main>
 
   <div id="modal-root"></div>

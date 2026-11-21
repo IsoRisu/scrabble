@@ -173,9 +173,10 @@
       submit: $('btn-submit'), recall: $('btn-recall'), swap: $('btn-swap'),
       pass: $('btn-pass'), challenge: $('btn-challenge'),
       resign: $('btn-resign'), timerToggle: $('btn-timer-toggle'), skipTime: $('btn-skip-time'), tracker: $('tracker'), modeLabel: $('mode-label'),
-      settingsBtn: $('btn-settings'), info: $('btn-info'), timer: $('timer'),
+      settingsBtn: $('btn-settings'), cogBtn: $('btn-cog'), info: $('btn-info'), timer: $('timer'),
       boardScroll: $('board-scroll'), zoom: $('btn-zoom'), start: $('btn-start'),
       shuffle: $('btn-shuffle'), minimap: $('minimap'),
+      settingsOverlay: $('settings-overlay'), closeSettings: $('btn-close-settings'),
     };
     let cells = new Map();   // "row,col" -> element (absolute board coordinates, may be negative)
     let builtBounds = null;  // bounds the current DOM grid was built for
@@ -1730,6 +1731,23 @@
     });
 
     els.settingsBtn.addEventListener('click', openSettingsModal);
+    if (els.cogBtn) {
+      els.cogBtn.addEventListener('click', () => {
+        if (els.settingsOverlay) {
+          els.settingsOverlay.hidden = false;
+        } else {
+          openSettingsModal();
+        }
+      });
+    }
+    if (els.closeSettings && els.settingsOverlay) {
+      els.closeSettings.addEventListener('click', () => {
+        els.settingsOverlay.hidden = true;
+      });
+      els.settingsOverlay.addEventListener('pointerdown', (e) => {
+        if (e.target === els.settingsOverlay) els.settingsOverlay.hidden = true;
+      });
+    }
     els.start.addEventListener('click', () => act('start_game', {}, () => toast('Game started.')));
     els.info.addEventListener('click', openInfoModal);
 

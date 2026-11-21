@@ -510,3 +510,173 @@ body {
 .board .tile.boosted.boost-hi { background: linear-gradient(#ffc21a, #e09a00); box-shadow: inset 0 0 0 2px rgba(100, 60, 0, .6), 0 3px 0 #96650a, 0 5px 7px rgba(70, 40, 0, .35); }
 .board .tile.last { box-shadow: inset 0 0 0 2px rgba(80, 20, 8, .6), 0 3px 0 #7d230d, 0 0 0 3px var(--hl), 0 5px 7px rgba(60, 15, 5, .35); }
 .board .tile.opp-ghost { background: rgba(164, 109, 249, .18); box-shadow: none; }
+/* ---------- Full-Screen Viewport & Floating UI Overlays ---------- */
+body[data-page="game"] {
+  margin: 0;
+  padding: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  position: relative;
+  background: var(--bg);
+}
+
+.game-viewport {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+}
+
+.game-viewport .board-col {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+}
+
+.game-viewport .board-wrap {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+.game-viewport .board {
+  max-width: min(96vw, calc(100vh - 140px));
+  max-height: min(96vh, calc(100vw - 40px));
+  width: min(96vw, calc(100vh - 140px));
+  height: min(96vw, calc(100vh - 140px));
+  aspect-ratio: 1 / 1;
+  margin: auto;
+}
+
+/* Floating Topbar */
+.floating-topbar {
+  position: fixed;
+  top: 10px;
+  left: 14px;
+  right: 14px;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  background: rgba(255, 125, 82, 0.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #fff;
+  border-radius: 16px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+}
+
+.floating-turn {
+  position: fixed;
+  top: 66px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 99;
+  padding: 6px 16px;
+  border-radius: 99px;
+  font-size: 13px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  pointer-events: none;
+}
+
+/* Floating Overlay Panel (Top-Right / Players / Scores / Timer) */
+.floating-overlay-panel {
+  position: fixed;
+  top: 72px;
+  right: 14px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 260px;
+  background: rgba(255, 243, 223, 0.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 2px solid var(--panel-border);
+  border-radius: 16px;
+  padding: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  max-height: calc(100vh - 160px);
+  overflow-y: auto;
+}
+
+.floating-overlay-panel .players {
+  gap: 6px;
+}
+
+.floating-overlay-panel .player-card {
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.bag-float {
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.6);
+  padding: 4px 8px;
+  border-radius: 8px;
+}
+
+/* Floating Bottom Overlay (Rack & Controls) */
+.floating-bottom-overlay {
+  position: fixed;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: min(96vw, 760px);
+  background: rgba(255, 243, 223, 0.94);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 2px solid var(--panel-border);
+  border-radius: 20px;
+  padding: 10px 14px 12px;
+  box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.25);
+}
+
+.floating-bottom-overlay .rack {
+  margin-top: 0;
+  width: 100%;
+}
+
+.floating-bottom-overlay .controls {
+  margin-top: 0;
+  gap: 6px;
+}
+
+.floating-bottom-overlay .controls .btn {
+  padding: 8px 12px;
+  min-height: 38px;
+  font-size: 13px;
+}
+
+.cog-btn {
+  background: var(--black);
+  border-color: #000;
+  font-size: 16px;
+}
+
+.settings-modal {
+  max-height: 85vh;
+  overflow-y: auto;
+}
