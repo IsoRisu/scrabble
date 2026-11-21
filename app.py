@@ -99,6 +99,10 @@ def create_room():
         if not isinstance(payload["auto_expand"], bool):
             return jsonify(error="auto_expand must be true or false."), 400
         options["auto_expand"] = payload["auto_expand"]
+    if payload.get("auto_check") is not None:
+        if not isinstance(payload["auto_check"], bool):
+            return jsonify(error="auto_check must be true or false."), 400
+        options["auto_check"] = payload["auto_check"]
     if payload.get("expand_margin") is not None:
         try:
             check_expand_margin(payload["expand_margin"])
@@ -320,7 +324,7 @@ def game_action(event):
 @game_action("update_settings")
 def on_update_settings(room, player, data):
     """Change game settings: {"mode": "wild"|"classic", "length": "short"|"medium"|"full", "timer": "off"|"30s"|...,
-    "auto_expand": bool, "expand_margin": 1-10, "max_players": 2-16 (wild only, before the game starts),
+    "auto_expand": bool, "auto_check": bool, "expand_margin": 1-10, "max_players": 2-16 (wild only, before the game starts),
     "language": "en"|"fi"|"fr"|"es"|"sv" (only those with a word list installed)}.
 
     Either player may do this, but only before the first turn has been played.
@@ -334,11 +338,13 @@ def on_update_settings(room, player, data):
         expand_margin=data.get("expand_margin"),
         max_players=data.get("max_players"),
         language=data.get("language"),
+        auto_check=data.get("auto_check"),
     )
     return {
         "mode": room.mode, "length": room.length, "timer": room.timer,
         "auto_expand": room.auto_expand, "expand_margin": room.expand_margin,
         "max_players": room.max_players, "language": room.language,
+        "auto_check": room.auto_check,
     }
 
 

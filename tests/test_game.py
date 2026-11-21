@@ -720,6 +720,15 @@ class ModeTests(unittest.TestCase):
     def test_default_mode_is_wild_with_automatic_checking(self):
         room = Room("X")
         self.assertEqual((room.mode, room.rules, room.length), ("wild", "strict", "medium"))
+        self.assertTrue(room.auto_check)
+
+    def test_classic_mode_automatic_word_check_toggle(self):
+        room = Room("X", mode="classic", auto_check=False)
+        self.assertEqual(room.rules, "challenge")
+        self.assertFalse(room.auto_check)
+        room.update_settings(room.add_player("A"), auto_check=True)
+        self.assertEqual(room.rules, "strict")
+        self.assertTrue(room.auto_check)
 
     def test_wild_keeps_bonuses_on_board(self):
         room, _ = self.play_first("wild")
