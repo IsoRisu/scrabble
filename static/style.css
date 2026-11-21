@@ -406,8 +406,7 @@ input[type="text"], select {
   .layout { padding: 10px 12px 40px; }
 }
 
-.create-field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; font-weight: 700; }
-.create-field select { width: 100%; }
+
 
 /* ---------- tile tracker, resign, timer controls, dictionary links ---------- */
 .tracker { background: var(--panel); border-radius: 14px; padding: 10px 12px; font-size: 13px; }

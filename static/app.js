@@ -70,8 +70,6 @@
   function initIndex() {
     const createBtn = $('create-btn');
     const createError = $('create-error');
-    const playersSel = $('create-players');
-    for (let n = 2; n <= 16; n += 1) playersSel.append(h('option', { value: String(n), text: n === 2 ? '2 players' : `${n} players (Wild)` }));
 
     createBtn.addEventListener('click', async () => {
       createBtn.disabled = true;
@@ -80,8 +78,7 @@
         const res = await fetch('/create', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          // More than two players only works in Wild (the default); the server picks a bag that fits.
-          body: JSON.stringify(Number(playersSel.value) > 2 ? { max_players: Number(playersSel.value) } : {}),
+          body: JSON.stringify({}),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || 'Could not create a game.');
@@ -493,18 +490,10 @@
         const languages = config.languages || [config.default_language];
         const languageSel = h('select', { 'aria-label': 'Language' },
           languages.map((l) => option(l, LANGUAGE_NAME[l] || l)));
-        const range = config.player_range || [2, 4];
-        const playersSel = h('select', { 'aria-label': 'Players' });
-        for (let n = range[0]; n <= range[1]; n += 1) {
-          playersSel.append(option(String(n), `${n} players`));
-        }
-        playersSel.value = String(S.max_players || 2);
         const rack = config.rack_size || 7;
         const fits = (length, players) => players * rack <= config.lengths[length];
-        // Lengths whose bag cannot give every player a full rack are greyed out; picking a bigger
-        // player count raises the length to the shortest one that fits (the server does the same).
         const syncLengths = () => {
-          const players = Number(playersSel.value);
+          const players = Number(S.max_players || 2);
           for (const opt of lengthSel.options) {
             opt.disabled = !fits(opt.value, players);
             opt.title = opt.disabled ? `Not enough tiles for ${players} players` : '';
@@ -515,12 +504,8 @@
           }
         };
         const syncPlayers = () => {
-          // Classic uses challenges, which only work one-on-one.
-          if (modeSel.value === 'classic' && !autoCheckChk.checked) playersSel.value = '2';
-          playersSel.disabled = modeSel.value === 'classic' && !autoCheckChk.checked;
           syncLengths();
         };
-        playersSel.addEventListener('change', syncLengths);
         languageSel.value = S.language;
         modeSel.value = S.mode;
         lengthSel.value = S.length;
@@ -534,7 +519,7 @@
         autoCheckChk.addEventListener('change', syncPlayers);
         showHelp();
         updateAutoCheckVisibility();
-        if (S.status === 'waiting') syncPlayers(); else syncLengths();
+        syncLengths();
         const help = h('p', { class: 'hint' });
         const showHelp = () => { help.textContent = (MODE_INFO[modeSel.value] || {}).help || ''; };
         const field = (label, el) => h('label', { class: 'field' }, h('span', { text: label }), el);
@@ -547,9 +532,6 @@
           if (modeSel.value === 'classic' && autoCheckChk.checked !== (S.auto_check !== undefined ? S.auto_check : false)) {
             change.auto_check = autoCheckChk.checked;
           }
-          if (S.status === 'waiting' && Number(playersSel.value) !== (S.max_players || 2)) {
-            change.max_players = Number(playersSel.value);
-          }
           api.close();
           if (Object.keys(change).length) act('update_settings', change, () => toast('Game settings updated.'));
         };
@@ -558,7 +540,6 @@
           h('p', { text: 'Anyone in the room can change these until the first turn is played.' }),
           field('Scoring', modeSel), help,
           autoCheckRow,
-          ...(S.status === 'waiting' ? [field('Players', playersSel)] : []),
           field('Length', lengthSel),
           field('Timer', timerSel),
           ...(languages.length > 1 ? [field('Language', languageSel)] : []),

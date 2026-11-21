@@ -6,7 +6,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from game import room as room_module  # noqa: E402
+import game.room as room_module  # noqa: E402
 from game.board import Board, GameError, Placement, initial_bounds  # noqa: E402
 from game.room import (  # noqa: E402
     CONFIG, Room, RoomRegistry, clean_name, diff_views, load_words, set_words,
@@ -935,8 +935,23 @@ class MultiplayerTests(unittest.TestCase):
 
     def test_full_room_rejects_a_fourth_player(self):
         room, _ = self.lobby(3)
+        room.max_players = 3
         with self.assertRaisesRegex(GameError, "full"):
             room.add_player("Zed")
+
+    def test_wild_mode_automatic_room_size_scaling(self):
+        set_words(WORDS)
+        room = Room("AUTO", mode="wild", max_players=2, rng=random.Random(1))
+        room.add_player("Ann")
+        room.add_player("Ben")
+        self.assertEqual(room.max_players, 2)
+        # Adding a 3rd player in wild mode should automatically scale max_players & bag length seamlessly
+        p3 = room.add_player("Cy")
+        self.assertIsNotNone(p3)
+        self.assertEqual(room.max_players, 3)
+        p4 = room.add_player("Di")
+        self.assertIsNotNone(p4)
+        self.assertEqual(room.max_players, 4)
 
 
 class ExpansionTests(unittest.TestCase):

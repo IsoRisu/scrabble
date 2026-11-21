@@ -453,7 +453,18 @@ class Room:
     # ---- players -----------------------------------------------------
     def add_player(self, name):
         if len(self.players) >= self.max_players:
-            raise GameError("This room is full.")
+            if self.mode == "wild" and self.max_players < MAX_PLAYERS:
+                new_max = min(MAX_PLAYERS, self.max_players + 1)
+                needed_length = length_for_players(new_max, self.length)
+                if needed_length in LENGTHS and LENGTHS[needed_length] >= new_max * RACK_SIZE:
+                    self.max_players = new_max
+                    self.length = needed_length
+                    if self.status == "playing":
+                        self._deal()
+                else:
+                    raise GameError("This room is full.")
+            else:
+                raise GameError("This room is full.")
         seat = len(self.players)
         name = clean_name(name) or f"Player {seat + 1}"
         if any(p.name.lower() == name.lower() for p in self.players):
