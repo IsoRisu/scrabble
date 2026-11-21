@@ -117,10 +117,6 @@ def create_room():
         options["max_players"] = payload["max_players"]
         if "length" not in options:  # no length chosen: use the shortest one that fits everybody's rack
             options["length"] = length_for_players(payload["max_players"], DEFAULT_LENGTH)
-    elif options.get("mode", DEFAULT_MODE) == "wild" and "max_players" not in options:
-        options["max_players"] = MAX_PLAYERS
-        if "length" not in options:
-            options["length"] = length_for_players(MAX_PLAYERS, DEFAULT_LENGTH)
     if "max_players" in options or "length" in options:
         try:
             check_capacity(options.get("length", DEFAULT_LENGTH), options.get("max_players", 2))

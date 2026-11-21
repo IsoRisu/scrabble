@@ -79,11 +79,12 @@
       const mode = $('create-mode') ? $('create-mode').value : 'wild';
       const length = $('create-length') ? $('create-length').value : 'medium';
       const timer = $('create-timer') ? $('create-timer').value : 'off';
+      const max_players = $('create-players') ? parseInt($('create-players').value, 10) : 2;
       try {
         const res = await fetch('/create', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mode, length, timer }),
+          body: JSON.stringify({ mode, length, timer, max_players }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || 'Could not create a game.');
@@ -94,6 +95,26 @@
         createBtn.disabled = false;
       }
     };
+
+    // Keep the form consistent with the server rules: Classic is two-player, and every
+    // player needs a 7-tile rack from the bag (short 50, medium 100, full 150 tiles).
+    const TILES = { short: 50, medium: 100, full: 150 };
+    const syncCreateOptions = () => {
+      const modeSel = $('create-mode'), playersSel = $('create-players'), lengthSel = $('create-length');
+      if (!playersSel || !lengthSel) return;
+      if (modeSel && modeSel.value === 'classic') playersSel.value = '2';
+      playersSel.disabled = !!modeSel && modeSel.value === 'classic';
+      const players = parseInt(playersSel.value, 10) || 2;
+      Array.from(lengthSel.options).forEach((opt) => { opt.disabled = players * 7 > TILES[opt.value]; });
+      if (lengthSel.selectedOptions[0] && lengthSel.selectedOptions[0].disabled) {
+        const fit = Array.from(lengthSel.options).find((opt) => !opt.disabled);
+        if (fit) lengthSel.value = fit.value;
+      }
+    };
+    ['create-mode', 'create-players'].forEach((id) => {
+      if ($(id)) $(id).addEventListener('change', syncCreateOptions);
+    });
+    syncCreateOptions();
 
     if (createForm) {
       createForm.addEventListener('submit', handleCreate);
