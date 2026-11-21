@@ -26,7 +26,7 @@ on the server (the single source of truth), vanilla JS/HTML/CSS on the client
   (rooms are created with the defaults, **Wild** and **Full**):
   - **Mode**
     - **Wild** (default) - uses the Letter League board layout from `wild_rules.txt`: no triple word
-      squares (corners are plain, the four edge middles are triple letters). Every word is checked against the dictionary automatically
+      squares (corners are plain, the four edge middles are triple letters). By default every word is checked against the dictionary automatically
       (the live preview shows validity and invalid plays are rejected). A tile placed on a
       double or triple letter square **keeps its multiplier for the rest of the game**, so
       later words that reuse it score the improved value. Boosted tiles are shown with
@@ -34,6 +34,7 @@ on the server (the single source of truth), vanilla JS/HTML/CSS on the client
     - **Classic** - traditional scoring (premium squares only count on the turn the tile is
       placed). Any geometrically legal play is accepted and the opponent may `challenge_skip`
       it. A successful challenge removes the play; a failed one costs the challenger their turn.
+  - **Word check** (both modes) - *Automatic word check* on (default in Wild) rejects invalid words; off (default in Classic) accepts any legal play and the next player may challenge it.
   - **Length** - how many tiles are in the bag: Short (50), Medium (75) or Full (100).
   - **Timer** - off (default) or 30s / 60s / 90s / 2m / 3m / 5m per turn. The clock restarts every turn.
     In **Classic** the server owns the clock: when it runs out the player's turn is passed automatically

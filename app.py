@@ -29,7 +29,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 from game.board import GameError
 from game.room import (
-    CONFIG, DEFAULT_LENGTH, DEFAULT_MODE, LENGTHS, MODES, TIMERS, RoomRegistry, available_languages, check_capacity,
+    CONFIG, DEFAULT_LENGTH, DEFAULT_MODE, LENGTHS, MAX_PLAYERS, MODES, TIMERS, RoomRegistry, available_languages, check_capacity,
     check_expand_margin, check_language, check_players, diff_views, length_for_players,
 )
 
@@ -80,8 +80,8 @@ def create_room():
     """Create a room and return its 8-character code and shareable URL.
 
     An optional JSON body may preselect the settings:
-    {"mode": "wild"|"classic", "length": "short"|"medium"|"full", "timer": "off"|"30s"|...,
-    "max_players": 2-16}. A player count without a length picks the shortest length that fits.
+    {"mode": "wild"|"classic", "length": "short"|"medium"|"full", "timer": "off"|"30s"|...}.
+    Classic rooms seat 2 players, Wild rooms up to 16.
     Anything left out uses the default (Wild, medium, no timer). Either player can
     still change the settings inside the room until the first turn is played.
     """
@@ -109,19 +109,9 @@ def create_room():
         except GameError as exc:
             return jsonify(error=str(exc)), 400
         options["expand_margin"] = payload["expand_margin"]
-    if payload.get("max_players") is not None:
-        try:
-            check_players(options.get("mode", DEFAULT_MODE), payload["max_players"])
-        except GameError as exc:
-            return jsonify(error=str(exc)), 400
-        options["max_players"] = payload["max_players"]
-        if "length" not in options:  # no length chosen: use the shortest one that fits everybody's rack
-            options["length"] = length_for_players(payload["max_players"], DEFAULT_LENGTH)
-    if "max_players" in options or "length" in options:
-        try:
-            check_capacity(options.get("length", DEFAULT_LENGTH), options.get("max_players", 2))
-        except GameError as exc:  # the caller asked for an impossible combination
-            return jsonify(error=str(exc)), 400
+    # Player count is not a choice: Classic is always 2, Wild always takes up to 16 (the game starts when
+    # the host presses "Start now" or the room is full; the bag grows at start if there are too many players).
+    options["max_players"] = 2 if options.get("mode", DEFAULT_MODE) == "classic" else MAX_PLAYERS
     if payload.get("language") is not None:
         try:
             check_language(payload["language"])

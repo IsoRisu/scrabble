@@ -292,7 +292,8 @@ class Room:
             raise GameError("Auto-check must be on or off.")
         check_expand_margin(expand_margin)
         check_players(mode, max_players)
-        check_capacity(length, max_players)
+        if mode != "wild":  # Wild rooms hold up to 16; the bag is topped up at start if it is too small
+            check_capacity(length, max_players)
         check_language(language)
         self._auto_expand = auto_expand  # None = follow the mode's default
         self.expand_margin = expand_margin
@@ -331,9 +332,7 @@ class Room:
     @property
     def rules(self):
         """How words are checked: 'strict' (automatic) or 'challenge'."""
-        if self.mode == "classic":
-            return "strict" if self.auto_check else "challenge"
-        return MODE_RULES[self.mode]
+        return "strict" if self.auto_check else "challenge"  # the room's choice, in Wild and Classic alike
 
     @property
     def auto_check(self):
@@ -408,10 +407,11 @@ class Room:
             new_max = 2  # classic is two-player only
         check_players(mode, new_max)
         auto_length = None
-        if length_arg is None and new_max * RACK_SIZE > LENGTHS[length]:
+        if mode != "wild" and length_arg is None and new_max * RACK_SIZE > LENGTHS[length]:
             # The player count outgrew the bag and no length was chosen: pick one that fits.
             auto_length = length = length_for_players(new_max, length)
-        check_capacity(length, new_max)
+        if mode != "wild":
+            check_capacity(length, new_max)
         if new_max != self.max_players and self.status != "waiting":
             raise GameError("The number of players can only be changed before the game starts.")
         if new_max < len(self.players):
@@ -529,6 +529,9 @@ class Room:
 
     def start(self):
         """Deal racks and pick who goes first (called once both players are in)."""
+        if len(self.players) * RACK_SIZE > LENGTHS[self.length]:
+            self.length = length_for_players(len(self.players), self.length)
+            self._log("system", f"The game length was raised to {self.length} so every player gets a full rack.")
         self._deal()
         self.current = self.rng.randrange(len(self.players))
         self.status = "playing"

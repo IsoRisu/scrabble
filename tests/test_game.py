@@ -923,15 +923,12 @@ class MultiplayerTests(unittest.TestCase):
         self.assertEqual(sorted(seen), list(range(12)))
 
     def test_player_count_is_limited_by_the_bag(self):
-        with self.assertRaisesRegex(GameError, "not enough"):
-            Room("X", length="short", max_players=8)
-        room = Room("X", max_players=14)  # 98 of 100 tiles
-        with self.assertRaisesRegex(GameError, "not enough"):
-            room.update_settings(room.add_player("A"), length="medium", max_players=15)  # explicit: rejected
+        Room("X", length="short", max_players=8)  # Wild: fine, the bag is topped up at start
+        room = Room("X", max_players=14)
+        room.update_settings(room.add_player("A"), length="medium", max_players=16)
+        self.assertEqual(room.max_players, 16)
         with self.assertRaises(GameError):
             Room("X", max_players=17)
-        room.update_settings(room.players[0], length="full", max_players=16)
-        self.assertEqual(room.max_players, 16)
 
     def test_full_room_rejects_a_fourth_player(self):
         room, _ = self.lobby(3)
@@ -1282,20 +1279,20 @@ class FollowUpTests(unittest.TestCase):
     """Auto game length, shrinking after a won challenge, skipping offline players."""
 
     def test_raising_the_player_count_raises_the_length_when_none_was_chosen(self):
-        room = Room("X", length="short", rng=random.Random(1))
-        host = room.add_player("A")
-        room.update_settings(host, max_players=8)  # 56 tiles do not fit in a 50-tile bag
-        self.assertEqual((room.length, room.max_players), ("medium", 8))
-        room.update_settings(host, max_players=15)  # 105 tiles
-        self.assertEqual(room.length, "full")
+        # Wild rooms always seat up to 16; the bag is topped up when the game starts.
+        room = Room("X", length="short", max_players=16, rng=random.Random(1))
+        for i in range(9):
+            room.add_player(f"P{i}")  # 63 tiles do not fit in a 50-tile bag
+        room.start_now(room.players[0])
+        self.assertEqual(room.length, "medium")
+        self.assertTrue(all(len(p.rack) == 7 for p in room.players))
         self.assertTrue(any("raised" in entry["text"] for entry in room.history))
 
     def test_an_explicit_length_that_is_too_small_is_still_rejected(self):
         room = Room("X", rng=random.Random(1))
         host = room.add_player("A")
-        with self.assertRaisesRegex(GameError, "not enough"):
-            room.update_settings(host, length="short", max_players=8)
-        self.assertEqual((room.length, room.max_players), ("medium", 2))
+        room.update_settings(host, length="short", max_players=8)  # Wild: no longer rejected, the bag grows at start
+        self.assertEqual((room.length, room.max_players), ("short", 8))
 
     def test_length_for_players(self):
         from game.room import length_for_players
@@ -1699,3 +1696,24 @@ class WildTimerTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WordCheckOptionTests(unittest.TestCase):
+    """Automatic word check vs. challenges is a room setting in both modes."""
+
+    def test_defaults_follow_the_mode(self):
+        set_words(WORDS)
+        self.assertEqual(Room("W", mode="wild").rules, "strict")
+        self.assertEqual(Room("C", mode="classic").rules, "challenge")
+
+    def test_either_mode_can_use_either_rule(self):
+        set_words(WORDS)
+        for mode, flip in (("wild", False), ("classic", True)):
+            room = Room("R", mode=mode, rng=random.Random(1))
+            host = room.add_player("A")
+            room.add_player("B")
+            room.update_settings(host, auto_check=flip)
+            self.assertEqual(room.rules, "strict" if flip else "challenge")
+            self.assertEqual(room.auto_check, flip)
+            room.update_settings(host, auto_check=not flip)
+            self.assertEqual(room.rules, "challenge" if flip else "strict")

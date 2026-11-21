@@ -79,12 +79,11 @@
       const mode = $('create-mode') ? $('create-mode').value : 'wild';
       const length = $('create-length') ? $('create-length').value : 'medium';
       const timer = $('create-timer') ? $('create-timer').value : 'off';
-      const max_players = $('create-players') ? parseInt($('create-players').value, 10) : 2;
       try {
         const res = await fetch('/create', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mode, length, timer, max_players }),
+          body: JSON.stringify({ mode, length, timer }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || 'Could not create a game.');
@@ -95,26 +94,6 @@
         createBtn.disabled = false;
       }
     };
-
-    // Keep the form consistent with the server rules: Classic is two-player, and every
-    // player needs a 7-tile rack from the bag (short 50, medium 100, full 150 tiles).
-    const TILES = { short: 50, medium: 100, full: 150 };
-    const syncCreateOptions = () => {
-      const modeSel = $('create-mode'), playersSel = $('create-players'), lengthSel = $('create-length');
-      if (!playersSel || !lengthSel) return;
-      if (modeSel && modeSel.value === 'classic') playersSel.value = '2';
-      playersSel.disabled = !!modeSel && modeSel.value === 'classic';
-      const players = parseInt(playersSel.value, 10) || 2;
-      Array.from(lengthSel.options).forEach((opt) => { opt.disabled = players * 7 > TILES[opt.value]; });
-      if (lengthSel.selectedOptions[0] && lengthSel.selectedOptions[0].disabled) {
-        const fit = Array.from(lengthSel.options).find((opt) => !opt.disabled);
-        if (fit) lengthSel.value = fit.value;
-      }
-    };
-    ['create-mode', 'create-players'].forEach((id) => {
-      if ($(id)) $(id).addEventListener('change', syncCreateOptions);
-    });
-    syncCreateOptions();
 
     if (createForm) {
       createForm.addEventListener('submit', handleCreate);
@@ -206,11 +185,11 @@
     const MODE_INFO = {
       wild: {
         label: 'Wild',
-        help: 'Words are checked automatically. Letters hit by a bonus keep it for the rest of the game (letters added to them later are not multiplied). A bingo doubles the main word.',
+        help: 'Letters hit by a bonus keep it for the rest of the game (letters added to them later are not multiplied). A bingo doubles the main word.',
       },
       classic: {
         label: 'Classic',
-        help: 'Traditional scoring: premium squares only count on the turn they are covered and a bingo is a flat 50. Any play is accepted and your opponent may challenge it (two players), unless automatic word check is enabled.',
+        help: 'Traditional scoring: premium squares only count on the turn they are covered and a bingo is a flat 50. A bingo is a flat 50.',
       },
     };
     const LANGUAGE_NAME = { en: 'English', fi: 'Suomi', fr: 'Français', es: 'Español', sv: 'Svenska' };
@@ -522,6 +501,8 @@
         const languages = config.languages || [config.default_language];
         const languageSel = h('select', { 'aria-label': 'Language' },
           languages.map((l) => option(l, LANGUAGE_NAME[l] || l)));
+        const help = h('p', { class: 'hint' });
+        const showHelp = () => { help.textContent = (MODE_INFO[modeSel.value] || {}).help || ''; };
         const rack = config.rack_size || 7;
         const fits = (length, players) => players * rack <= config.lengths[length];
         const syncLengths = () => {
@@ -542,18 +523,17 @@
         modeSel.value = S.mode;
         lengthSel.value = S.length;
         timerSel.value = S.timer;
-        const autoCheckField = h('label', { class: 'field-row' }, autoCheckChk, h('span', { text: ' Automatic word check' }));
+        const autoCheckField = h('label', { class: 'field-row' }, autoCheckChk, h('span', { text: ' Automatic word check (off = players can challenge)' }));
         const autoCheckRow = h('div', { class: 'field' }, autoCheckField);
-        const updateAutoCheckVisibility = () => {
-          autoCheckRow.style.display = modeSel.value === 'classic' ? 'block' : 'none';
-        };
-        modeSel.addEventListener('change', () => { showHelp(); syncPlayers(); updateAutoCheckVisibility(); });
-        autoCheckChk.addEventListener('change', syncPlayers);
+        // Switching mode moves the checkbox to that mode's default (Wild on, Classic off) unless it was changed by hand.
+        let checkTouched = false;
+        autoCheckChk.addEventListener('change', () => { checkTouched = true; });
+        modeSel.addEventListener('change', () => {
+          if (!checkTouched) autoCheckChk.checked = modeSel.value === 'wild' ? true : false;
+          showHelp(); syncPlayers();
+        });
         showHelp();
-        updateAutoCheckVisibility();
         syncLengths();
-        const help = h('p', { class: 'hint' });
-        const showHelp = () => { help.textContent = (MODE_INFO[modeSel.value] || {}).help || ''; };
         const field = (label, el) => h('label', { class: 'field' }, h('span', { text: label }), el);
         const save = () => {
           const change = {};
@@ -561,7 +541,9 @@
           if (lengthSel.value !== S.length) change.length = lengthSel.value;
           if (timerSel.value !== S.timer) change.timer = timerSel.value;
           if (languageSel.value !== S.language) change.language = languageSel.value;
-          if (modeSel.value === 'classic' && autoCheckChk.checked !== (S.auto_check !== undefined ? S.auto_check : false)) {
+          if (autoCheckChk.checked !== (S.auto_check !== undefined ? S.auto_check : S.mode === 'wild')) {
+            change.auto_check = autoCheckChk.checked;
+          } else if (change.mode && S.auto_check !== undefined && checkTouched) {
             change.auto_check = autoCheckChk.checked;
           }
           api.close();
@@ -956,7 +938,7 @@
       els.swap.title = S.bag_count < config.rack_size ? 'Fewer than 7 tiles left in the bag' : '';
       els.pass.disabled = !(myTurn() && !busy);
       els.pass.textContent = S.awaiting_final ? 'Accept & end game' : 'Pass Turn';
-      els.challenge.hidden = S.mode !== 'classic';
+      els.challenge.hidden = S.rules !== 'challenge';
       els.challenge.disabled = !(S.can_challenge && !busy);
       const me = S.players[S.you];
       els.resign.hidden = !(S.status === 'playing' && me && !me.resigned);
