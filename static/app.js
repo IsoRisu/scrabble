@@ -656,8 +656,9 @@
       let cls;
       const opp = opponent();
       if (S.status === 'waiting') {
-        text = `Waiting for players to join… (${S.players.length}/${S.max_players || 2})`;
-        cls = 'theirs';
+        els.banner.textContent = '';
+        els.banner.className = 'turn-banner';
+        return;
       } else if (S.status === 'finished') {
         text = S.winner === 'tie' ? "Game over – it's a tie!"
           : (S.winner === S.you ? 'Game over – you win!' : `Game over – ${S.players[S.winner].name} wins!`);
