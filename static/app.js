@@ -181,7 +181,7 @@
       },
       classic: {
         label: 'Classic',
-        help: 'Traditional scoring: premium squares only count on the turn they are covered and a bingo is a flat 50. Any play is accepted and your opponent may challenge it (two players).',
+        help: 'Traditional scoring: premium squares only count on the turn they are covered and a bingo is a flat 50. Any play is accepted and your opponent may challenge it (two players), unless automatic word check is enabled.',
       },
     };
     const LANGUAGE_NAME = { en: 'English', fi: 'Suomi', fr: 'Français', es: 'Español', sv: 'Svenska' };
@@ -489,6 +489,7 @@
           Object.keys(config.lengths).map((l) => option(l, lengthText(l))));
         const timerSel = h('select', { 'aria-label': 'Timer' },
           Object.keys(config.timers).map((t) => option(t, timerText(t))));
+        const autoCheckChk = h('input', { type: 'checkbox', checked: S.auto_check !== undefined ? S.auto_check : (S.mode === 'wild') });
         const languages = config.languages || [config.default_language];
         const languageSel = h('select', { 'aria-label': 'Language' },
           languages.map((l) => option(l, LANGUAGE_NAME[l] || l)));
@@ -515,8 +516,8 @@
         };
         const syncPlayers = () => {
           // Classic uses challenges, which only work one-on-one.
-          if (modeSel.value === 'classic') playersSel.value = '2';
-          playersSel.disabled = modeSel.value === 'classic';
+          if (modeSel.value === 'classic' && !autoCheckChk.checked) playersSel.value = '2';
+          playersSel.disabled = modeSel.value === 'classic' && !autoCheckChk.checked;
           syncLengths();
         };
         playersSel.addEventListener('change', syncLengths);
@@ -524,11 +525,18 @@
         modeSel.value = S.mode;
         lengthSel.value = S.length;
         timerSel.value = S.timer;
+        const autoCheckField = h('label', { class: 'field-row' }, autoCheckChk, h('span', { text: ' Automatic word check' }));
+        const autoCheckRow = h('div', { class: 'field' }, autoCheckField);
+        const updateAutoCheckVisibility = () => {
+          autoCheckRow.style.display = modeSel.value === 'classic' ? 'block' : 'none';
+        };
+        modeSel.addEventListener('change', () => { showHelp(); syncPlayers(); updateAutoCheckVisibility(); });
+        autoCheckChk.addEventListener('change', syncPlayers);
+        showHelp();
+        updateAutoCheckVisibility();
+        if (S.status === 'waiting') syncPlayers(); else syncLengths();
         const help = h('p', { class: 'hint' });
         const showHelp = () => { help.textContent = (MODE_INFO[modeSel.value] || {}).help || ''; };
-        modeSel.addEventListener('change', () => { showHelp(); syncPlayers(); });
-        showHelp();
-        if (S.status === 'waiting') syncPlayers(); else syncLengths();
         const field = (label, el) => h('label', { class: 'field' }, h('span', { text: label }), el);
         const save = () => {
           const change = {};
@@ -536,6 +544,9 @@
           if (lengthSel.value !== S.length) change.length = lengthSel.value;
           if (timerSel.value !== S.timer) change.timer = timerSel.value;
           if (languageSel.value !== S.language) change.language = languageSel.value;
+          if (modeSel.value === 'classic' && autoCheckChk.checked !== (S.auto_check !== undefined ? S.auto_check : false)) {
+            change.auto_check = autoCheckChk.checked;
+          }
           if (S.status === 'waiting' && Number(playersSel.value) !== (S.max_players || 2)) {
             change.max_players = Number(playersSel.value);
           }
@@ -546,6 +557,7 @@
           h('h2', { text: 'Game Settings' }),
           h('p', { text: 'Anyone in the room can change these until the first turn is played.' }),
           field('Scoring', modeSel), help,
+          autoCheckRow,
           ...(S.status === 'waiting' ? [field('Players', playersSel)] : []),
           field('Length', lengthSel),
           field('Timer', timerSel),

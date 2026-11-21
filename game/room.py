@@ -87,6 +87,7 @@ SCORELESS_TURN_LIMIT = 6  # consecutive passes/swaps/failed challenges that end 
 MODES = ("wild", "classic")
 DEFAULT_MODE = "wild"
 MODE_RULES = {"wild": "strict", "classic": "challenge"}
+DEFAULT_AUTO_CHECK = True
 # Tiles in the bag at the start of the game (racks are dealt from it).
 LENGTHS = {"short": 50, "medium": 100, "full": 150}
 DEFAULT_LENGTH = "medium"
@@ -276,15 +277,19 @@ class Player:
 class Room:
     def __init__(self, code, mode=DEFAULT_MODE, length=DEFAULT_LENGTH, timer=DEFAULT_TIMER, rng=None, clock=None,
                  auto_expand=None, expand_margin=DEFAULT_EXPAND_MARGIN, max_players=DEFAULT_PLAYERS,
-                 language=DEFAULT_LANGUAGE):
+                 language=DEFAULT_LANGUAGE, auto_check=None):
         if mode not in MODES:
             raise GameError("Unknown game type.")
+        if auto_check is not None and not isinstance(auto_check, bool):
+            raise GameError("Auto-check must be on or off.")
         if length not in LENGTHS:
             raise GameError("Unknown game length.")
         if timer not in TIMERS:
             raise GameError("Unknown timer setting.")
         if auto_expand is not None and not isinstance(auto_expand, bool):
             raise GameError("Auto-expand must be on or off.")
+        if auto_check is not None and not isinstance(auto_check, bool):
+            raise GameError("Auto-check must be on or off.")
         check_expand_margin(expand_margin)
         check_players(mode, max_players)
         check_capacity(length, max_players)
@@ -297,6 +302,7 @@ class Room:
         self.length = length
         self.timer = timer
         self.language = language
+        self._auto_check = auto_check
         self.clock = clock or time.time  # injectable so tests can move time
         self.turn_deadline = None  # clock() value at which the current turn expires
         self.timer_paused_left = None  # seconds left on a paused (Wild) turn timer, else None
@@ -325,7 +331,16 @@ class Room:
     @property
     def rules(self):
         """How words are checked: 'strict' (automatic) or 'challenge'."""
+        if self.mode == "classic":
+            return "strict" if self.auto_check else "challenge"
         return MODE_RULES[self.mode]
+
+    @property
+    def auto_check(self):
+        """Whether words are automatically checked."""
+        if self._auto_check is not None:
+            return self._auto_check
+        return self.mode == "wild"
 
     def active_players(self):
         """Players still in the game (everyone who has not resigned)."""
@@ -366,8 +381,8 @@ class Room:
 
     # ---- settings ----------------------------------------------------
     def update_settings(self, player, mode=None, length=None, timer=None, auto_expand=None, expand_margin=None,
-                        max_players=None, language=None):
-        """Change game type, length, timer, board expansion, and language. Only possible before the first turn."""
+                        max_players=None, language=None, auto_check=None):
+        """Change game type, length, timer, board expansion, language, and auto-check. Only possible before the first turn."""
         if self.settings_locked:
             raise GameError("Settings can only be changed before the first turn is played.")
         if mode is not None and mode not in MODES:
@@ -402,11 +417,14 @@ class Room:
         if new_max < len(self.players):
             raise GameError("More players than that have already joined.")
         expand_before = (self.auto_expand, self.expand_margin)
+        auto_check_before = self.auto_check
         if auto_expand is not None:
             self._auto_expand = auto_expand
+        if auto_check is not None:
+            self._auto_check = auto_check
         if (mode, length, timer, expand_margin, new_max, language) == (
             self.mode, self.length, self.timer, self.expand_margin, self.max_players, self.language
-        ) and self.auto_expand == expand_before[0]:
+        ) and self.auto_expand == expand_before[0] and self.auto_check == auto_check_before:
             return
         length_changed = length != self.length
         language_changed = language != self.language
@@ -949,7 +967,7 @@ class Room:
         """Challenge the opponent's last play (challenge rules only)."""
         self._require_turn(player)
         if self.rules != "challenge":
-            raise GameError("Challenges are only available in challenge mode. Words are checked automatically here.")
+            raise GameError("Challenges are only available when challenge rules are active (automatic word check is off).")
         move = self.last_move
         if move is None or move["seat"] == player.seat:
             raise GameError("There is no play to challenge.")
@@ -1165,6 +1183,7 @@ class Room:
             "timer": self.timer,
             "language": self.language,
             "max_players": self.max_players,
+            "auto_check": self.auto_check,
             "skippable": self.skippable_seat() if player.seat != self.skippable_seat() else None,
             "can_start": self.status == "waiting" and player.seat == 0 and len(self.players) >= MIN_PLAYERS,
             "auto_expand": self.auto_expand,
@@ -1239,7 +1258,7 @@ class RoomRegistry:
         return code
 
     def create(self, mode=DEFAULT_MODE, length=DEFAULT_LENGTH, timer=DEFAULT_TIMER,
-               auto_expand=None, expand_margin=DEFAULT_EXPAND_MARGIN, max_players=DEFAULT_PLAYERS, language=DEFAULT_LANGUAGE):
+               auto_expand=None, expand_margin=DEFAULT_EXPAND_MARGIN, max_players=DEFAULT_PLAYERS, language=DEFAULT_LANGUAGE, auto_check=None):
         """Create a room. Settings default to Wild / full / no timer and can still be
         changed inside the room until the first turn is played."""
         with self._lock:
@@ -1251,7 +1270,7 @@ class RoomRegistry:
                 code = new_room_code()
             room = Room(code, mode=mode, length=length, timer=timer,
                         auto_expand=auto_expand, expand_margin=expand_margin, max_players=max_players,
-                        language=language)
+                        language=language, auto_check=auto_check)
             self._rooms[code] = room
             return room
 
