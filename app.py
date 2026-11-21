@@ -81,7 +81,7 @@ def create_room():
 
     An optional JSON body may preselect the settings:
     {"mode": "wild"|"classic", "length": "short"|"medium"|"full", "timer": "off"|"30s"|...,
-    "max_players": 2-16}. A player count without a length picks the shortest length that fits.
+    "max_players": 2-16}. In wild mode, room length is automatic based on max_players.
     Anything left out uses the default (Wild, medium, no timer). Either player can
     still change the settings inside the room until the first turn is played.
     """
@@ -115,11 +115,15 @@ def create_room():
         except GameError as exc:
             return jsonify(error=str(exc)), 400
         options["max_players"] = payload["max_players"]
-        if "length" not in options:  # no length chosen: use the shortest one that fits everybody's rack
-            options["length"] = length_for_players(payload["max_players"], DEFAULT_LENGTH)
+    mode = options.get("mode", DEFAULT_MODE)
+    max_players = options.get("max_players", DEFAULT_PLAYERS)
+    if mode == "wild":
+        options["length"] = length_for_players(max_players, DEFAULT_LENGTH)
+    elif "length" not in options:
+        options["length"] = DEFAULT_LENGTH
     if "max_players" in options or "length" in options:
         try:
-            check_capacity(options.get("length", DEFAULT_LENGTH), options.get("max_players", 2))
+            check_capacity(options.get("length", DEFAULT_LENGTH), max_players)
         except GameError as exc:  # the caller asked for an impossible combination
             return jsonify(error=str(exc)), 400
     if payload.get("language") is not None:

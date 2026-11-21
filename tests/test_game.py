@@ -30,6 +30,19 @@ def word_placements(word, row, col, horizontal=True):
 
 
 class TileTests(unittest.TestCase):
+    def test_room_creation(self):
+        room = self.registry.create(mode="classic", length="short", max_players=2)
+        self.assertEqual(room.mode, "classic")
+        self.assertEqual(room.length, "short")
+        self.assertEqual(room.max_players, 2)
+
+    def test_wild_mode_automatic_length(self):
+        # In wild mode, length should automatically adjust based on max_players
+        room = self.registry.create(mode="wild", length="short", max_players=8)
+        self.assertEqual(room.mode, "wild")
+        # 8 players * 7 tiles = 56 tiles minimum, so short (50) is insufficient; length should be at least 'medium' (100)
+        self.assertNotEqual(room.length, "short")
+
     def test_bag_has_standard_distribution(self):
         bag = new_bag("en", random.Random(1))
         self.assertEqual(len(bag), 100)

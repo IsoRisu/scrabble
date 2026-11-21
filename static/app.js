@@ -487,6 +487,10 @@
         const modeSel = h('select', { 'aria-label': 'Scoring' }, config.modes.map((m) => option(m, modeLabel(m))));
         const lengthSel = h('select', { 'aria-label': 'Length' },
           Object.keys(config.lengths).map((l) => option(l, lengthText(l))));
+        const lengthField = h('div', { class: 'field' }, h('span', { text: 'Length' }), lengthSel);
+        const updateLengthVisibility = () => {
+          lengthField.style.display = modeSel.value === 'wild' ? 'none' : 'block';
+        };
         const timerSel = h('select', { 'aria-label': 'Timer' },
           Object.keys(config.timers).map((t) => option(t, timerText(t))));
         const autoCheckChk = h('input', { type: 'checkbox', checked: S.auto_check !== undefined ? S.auto_check : (S.mode === 'wild') });
@@ -530,7 +534,8 @@
         const updateAutoCheckVisibility = () => {
           autoCheckRow.style.display = modeSel.value === 'classic' ? 'block' : 'none';
         };
-        modeSel.addEventListener('change', () => { showHelp(); syncPlayers(); updateAutoCheckVisibility(); });
+        modeSel.addEventListener('change', () => { showHelp(); syncPlayers(); updateAutoCheckVisibility(); updateLengthVisibility(); });
+        updateLengthVisibility();
         autoCheckChk.addEventListener('change', syncPlayers);
         showHelp();
         updateAutoCheckVisibility();
@@ -559,7 +564,7 @@
           field('Scoring', modeSel), help,
           autoCheckRow,
           ...(S.status === 'waiting' ? [field('Players', playersSel)] : []),
-          field('Length', lengthSel),
+          lengthField,
           field('Timer', timerSel),
           ...(languages.length > 1 ? [field('Language', languageSel)] : []),
           h('div', { class: 'actions' },

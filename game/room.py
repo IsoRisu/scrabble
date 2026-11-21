@@ -397,7 +397,6 @@ class Room:
             raise GameError("Auto-expand must be on or off.")
         if expand_margin is not None:
             check_expand_margin(expand_margin)
-        length_arg = length
         mode = mode or self.mode
         length = length or self.length
         timer = timer or self.timer
@@ -407,10 +406,10 @@ class Room:
         if max_players is None and mode == "classic" and new_max != 2:
             new_max = 2  # classic is two-player only
         check_players(mode, new_max)
-        auto_length = None
-        if length_arg is None and new_max * RACK_SIZE > LENGTHS[length]:
-            # The player count outgrew the bag and no length was chosen: pick one that fits.
-            auto_length = length = length_for_players(new_max, length)
+        if mode == "wild":
+            length = length_for_players(new_max, length)
+        elif length is None and length_arg is None:
+            pass
         check_capacity(length, new_max)
         if new_max != self.max_players and self.status != "waiting":
             raise GameError("The number of players can only be changed before the game starts.")
@@ -446,8 +445,6 @@ class Room:
             f"{player.name} set the game to {label} scoring, {length} length "
             f"({LENGTHS[length]} tiles), {clock}, {grow}, {self.max_players} players, language {language}.",
         )
-        if auto_length:
-            self._log("system", f"The game length was raised to {length} so every player gets a full rack.")
         self.maybe_start()  # lowering the player count may make the room full
 
     # ---- players -----------------------------------------------------
