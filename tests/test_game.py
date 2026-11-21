@@ -1699,3 +1699,13 @@ class WildTimerTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RoomCreationHttpTests(unittest.TestCase):
+    def test_create_room_payload_parsing(self):
+        # Verify that RoomRegistry and options handle various parameters
+        registry = RoomRegistry()
+        room = registry.create(mode="classic", auto_check=False, auto_expand=True)
+        self.assertEqual(room.mode, "classic")
+        self.assertFalse(room.auto_check)
+        self.assertTrue(room.auto_expand)

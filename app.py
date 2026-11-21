@@ -95,14 +95,20 @@ def create_room():
         if not isinstance(value, str) or value not in allowed:
             return jsonify(error=f"Unknown {key}. Use one of: " + ", ".join(allowed)), 400
         options[key] = value
-    if payload.get("auto_expand") is not None:
-        if not isinstance(payload["auto_expand"], bool):
+    if "auto_expand" in payload and payload.get("auto_expand") is not None:
+        val = payload["auto_expand"]
+        if isinstance(val, str):
+            val = val.lower() in ("true", "1", "yes")
+        if not isinstance(val, bool):
             return jsonify(error="auto_expand must be true or false."), 400
-        options["auto_expand"] = payload["auto_expand"]
-    if payload.get("auto_check") is not None:
-        if not isinstance(payload["auto_check"], bool):
+        options["auto_expand"] = val
+    if "auto_check" in payload and payload.get("auto_check") is not None:
+        val = payload["auto_check"]
+        if isinstance(val, str):
+            val = val.lower() in ("true", "1", "yes")
+        if not isinstance(val, bool):
             return jsonify(error="auto_check must be true or false."), 400
-        options["auto_check"] = payload["auto_check"]
+        options["auto_check"] = val
     if payload.get("expand_margin") is not None:
         try:
             check_expand_margin(payload["expand_margin"])
