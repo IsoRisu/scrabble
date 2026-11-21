@@ -70,15 +70,20 @@
   function initIndex() {
     const createBtn = $('create-btn');
     const createError = $('create-error');
+    const createForm = $('create-form');
 
-    createBtn.addEventListener('click', async () => {
+    const handleCreate = async (event) => {
+      if (event) event.preventDefault();
       createBtn.disabled = true;
       createError.hidden = true;
+      const mode = $('create-mode') ? $('create-mode').value : 'wild';
+      const length = $('create-length') ? $('create-length').value : 'medium';
+      const timer = $('create-timer') ? $('create-timer').value : 'off';
       try {
         const res = await fetch('/create', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({}),
+          body: JSON.stringify({ mode, length, timer }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || 'Could not create a game.');
@@ -88,7 +93,13 @@
         createError.hidden = false;
         createBtn.disabled = false;
       }
-    });
+    };
+
+    if (createForm) {
+      createForm.addEventListener('submit', handleCreate);
+    } else {
+      createBtn.addEventListener('click', handleCreate);
+    }
 
     $('join-form').addEventListener('submit', (event) => {
       event.preventDefault();
