@@ -396,40 +396,49 @@
     const boundsOf = () => (S && S.bounds) || config.bounds;
     const boundsChanged = (a, b) => !a || a.top !== b.top || a.bottom !== b.bottom || a.left !== b.left || a.right !== b.right;
 
-    // (Re)build the grid for the current bounds. The server grows the board as tiles get
-    // near an edge, so this runs again whenever S.bounds changes.
+    // (Re)build or update the grid for the current bounds. The server grows the board as tiles get
+    // near an edge, updating cells via cells.get(key) reference map without full teardown when possible.
     function buildBoard() {
       const b = boundsOf();
       const prev = builtBounds;
-      els.board.replaceChildren();
-      cells = new Map();
-      els.board.style.setProperty('--cols', String(b.right - b.left + 1));
-      els.board.style.setProperty('--rows', String(b.bottom - b.top + 1));
-      const [centerRow, centerCol] = config.center;
-      for (let r = b.top; r <= b.bottom; r += 1) {
-        for (let c = b.left; c <= b.right; c += 1) {
-          const kind = premiumAt(r, c);
-          const isCenter = r === centerRow && c === centerCol;
-          const cell = h('div', {
-            class: `cell${kind ? ` ${kind.toLowerCase()}` : ''}${isCenter ? ' center' : ''}`,
-            role: 'gridcell',
-            dataset: { row: String(r), col: String(c) },
-          });
-          cell.dataset.label = isCenter ? '★' : (kind || '');
-          cell.dataset.sig = '';
-          els.board.append(cell);
-          cells.set(`${r},${c}`, cell);
+      const modeChanged = builtMode !== currentMode();
+      const boundsDiff = boundsChanged(prev, b);
+
+      if (!prev || boundsDiff || modeChanged || cells.size === 0) {
+        els.board.replaceChildren();
+        cells = new Map();
+        els.board.style.setProperty('--cols', String(b.right - b.left + 1));
+        els.board.style.setProperty('--rows', String(b.bottom - b.top + 1));
+        const [centerRow, centerCol] = config.center;
+        const fragment = document.createDocumentFragment();
+        for (let r = b.top; r <= b.bottom; r += 1) {
+          for (let c = b.left; c <= b.right; c += 1) {
+            const kind = premiumAt(r, c);
+            const isCenter = r === centerRow && c === centerCol;
+            const cell = h('div', {
+              class: `cell${kind ? ` ${kind.toLowerCase()}` : ''}${isCenter ? ' center' : ''}`,
+              role: 'gridcell',
+              dataset: { row: String(r), col: String(c) },
+            });
+            cell.dataset.label = isCenter ? '★' : (kind || '');
+            cell.dataset.sig = '';
+            fragment.append(cell);
+            cells.set(`${r},${c}`, cell);
+          }
         }
+        els.board.append(fragment);
+        builtBounds = { ...b };
+        builtMode = currentMode();
+        if (prev && boundsDiff) {
+          const sample = els.board.firstElementChild;
+          const step = sample ? sample.offsetWidth + 3 : 0;
+          els.boardScroll.scrollLeft += (prev.left - b.left) * step;
+          els.boardScroll.scrollTop += (prev.top - b.top) * step;
+        }
+        return;
       }
-      builtBounds = { ...b };
-      builtMode = currentMode();
-      if (prev) {
-        // Growing at the top/left shifts everything down/right: keep the same squares in view.
-        const sample = els.board.firstElementChild;
-        const step = sample ? sample.offsetWidth + 3 : 0;
-        els.boardScroll.scrollLeft += (prev.left - b.left) * step;
-        els.boardScroll.scrollTop += (prev.top - b.top) * step;
-      }
+
+      // If bounds and mode are unchanged, we do not need to rebuild the DOM structure at all.
     }
 
     // `boost` is the letter multiplier shown on the tile: the one a tile on the board
