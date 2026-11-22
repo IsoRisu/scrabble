@@ -31,9 +31,9 @@
   --sq-normal: #ffe5c6;
   --sq-tw: #c9a8fd;
   --sq-dw: #ffd05f;
-  --sq-tl: #aef6ab;
-  --sq-dl: #abe6ff;
-  --sq-ink: rgba(74, 36, 22, .62);
+  --sq-tl: #28542b;
+  --sq-dl: #104968;
+  --sq-ink: rgba(255, 255, 255, 0.95);
 
   /* Seven rack tiles must fit on one row: (viewport - page/rack padding - gaps) / 7 */
   --rack-tile: clamp(38px, calc((100vw - 60px) / 7), 64px);
