@@ -603,7 +603,7 @@ body[data-page="game"] {
   flex-direction: column;
   gap: 8px;
   max-width: 280px;
-  background: rgba(255, 243, 223, 0.92);
+  background: rgba(255, 243, 223, 0.96);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   border: 2px solid var(--panel-border);
@@ -612,6 +612,7 @@ body[data-page="game"] {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
   max-height: calc(100vh - 160px);
   overflow-y: auto;
+  touch-action: pan-y;
 }
 
 /* Mobile Player Lobby Refactor: Limit visible slots to max 4 with compact scroll or indicator */
