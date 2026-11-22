@@ -49,12 +49,12 @@
       <button id="btn-challenge" class="btn btn-danger btn-small" type="button" hidden>Challenge</button>
     </div>
 
-    <div class="floating-bottom-overlay mobile-bottom-sheet" role="region" aria-label="Game controls and tile rack">
+    <div class="floating-bottom-overlay mobile-bottom-sheet unified-scrollable-drawer" role="region" aria-label="Game controls and tile rack">
       <div class="bottom-sheet-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 4px;">
         <div class="bottom-sheet-status" id="bottom-sheet-status-text">Your rack appears when the game starts</div>
         <button id="btn-toggle-drawer" class="overlay-toggle-btn drawer-toggle-btn" type="button" aria-expanded="true" aria-label="Toggle collapsible drawer">&#9650; Hide Drawer</button>
       </div>
-      <div class="collapsible-drawer-content">
+      <div class="collapsible-drawer-content unified-drawer-scroll-body">
         <div id="preview" class="preview" aria-live="polite"></div>
         <div id="rack" class="rack" aria-label="Your tile rack" tabindex="0"></div>
         <div class="contextual-action-bar controls mobile-action-controls">
@@ -65,31 +65,30 @@
           <button id="btn-zoom" class="btn zoom-btn" type="button" aria-pressed="false" title="Zoom board">&#128269; Zoom</button>
           <button id="btn-pass" class="btn" type="button" disabled title="Pass turn">&#9193; Pass</button>
           <button id="btn-resign" class="btn btn-danger" type="button" hidden title="Resign">&#10005; Resign</button>
-          <div class="overflow-menu-wrap" hidden>
-            <button id="btn-overflow-toggle" class="btn icon-btn" type="button" aria-haspopup="true" aria-expanded="false" title="More actions">&#8943;</button>
-            <div id="overflow-dropdown" class="overflow-dropdown" hidden></div>
+          <button id="btn-drawer-tracker-toggle" class="btn" type="button" title="Toggle Tile Tracker & History">📊 Stats & Moves</button>
+        </div>
+        <div id="unified-drawer-secondary-section" class="unified-drawer-secondary-section" hidden>
+          <div id="tracker" class="tracker" aria-label="Unseen tiles" hidden></div>
+          <div id="share" class="share" hidden>
+            <p>Waiting for players. Send them this link:</p>
+            <div class="row">
+              <input id="share-url" type="text" readonly aria-label="Shareable link">
+              <button id="share-copy" class="btn" type="button">Copy</button>
+            </div>
+            <button id="btn-start" class="btn btn-primary btn-wide" type="button" hidden style="margin-top: 8px">Start now</button>
+          </div>
+          <div class="history-wrap">
+            <h3>Moves</h3>
+            <ol id="history" class="history"></ol>
           </div>
         </div>
       </div>
     </div>
 
     <div id="settings-overlay" class="settings-overlay modal-backdrop" hidden>
-      <div class="modal settings-modal">
-        <h2>Game Settings & History</h2>
+      <div class="modal settings-modal" role="dialog" aria-modal="true" aria-label="Game Settings">
+        <h2>Game Settings</h2>
         <button id="btn-settings" class="btn btn-wide" type="button">Edit Game Settings</button>
-        <div id="tracker" class="tracker" aria-label="Unseen tiles" hidden></div>
-        <div id="share" class="share" hidden>
-          <p>Waiting for players. Send them this link:</p>
-          <div class="row">
-            <input id="share-url" type="text" readonly aria-label="Shareable link">
-            <button id="share-copy" class="btn" type="button">Copy</button>
-          </div>
-          <button id="btn-start" class="btn btn-primary btn-wide" type="button" hidden style="margin-top: 8px">Start now</button>
-        </div>
-        <div class="history-wrap">
-          <h3>Moves</h3>
-          <ol id="history" class="history"></ol>
-        </div>
         <div class="actions">
           <button id="btn-close-settings" class="btn btn-primary" type="button">Close</button>
         </div>
