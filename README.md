@@ -7,6 +7,7 @@ on the server (the single source of truth), vanilla JS/HTML/CSS on the client
 ## Features
 
 - Server-authoritative 15x15 board, standard 100-tile bag, 7-tile racks, scores, turn order.
+- **Mobile UI & Clutter Reduction Layout (Phase 3 Verified)**: Maximizes board visibility via full-viewport layout, a collapsible top-right player drawer/overlay, and a bottom sheet for tile rack and action controls with responsive touch drag-and-drop support.
 - Rooms: `POST /create` returns an 8-character code and a shareable `/join/<code>` URL.
 - Placement rules (first word covers the centre, later words connect, one line, no gaps),
   dictionary check, premium squares (DL/TL/DW/TW), 50-point bingo for using all 7 tiles.

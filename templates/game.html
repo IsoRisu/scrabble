@@ -43,7 +43,7 @@
         <button id="btn-toggle-players" class="overlay-toggle-btn" type="button" aria-expanded="true" aria-label="Toggle player list">&#9650; Hide</button>
       </div>
       <div id="players" class="players"></div>
-      <div class="bag-float">Tiles in bag: <b id="bag-count">&ndash;</b></div>
+      <div class="bag-float">Bag: <b id="bag-count">&ndash;</b></div>
       <div id="timer" class="timer" aria-label="Turn timer"></div>
       <div class="timer-actions">
         <button id="btn-timer-toggle" class="btn btn-small" type="button" hidden>Pause</button>
@@ -58,13 +58,13 @@
       <div id="preview" class="preview" aria-live="polite"></div>
       <div id="rack" class="rack" aria-label="Your tile rack"></div>
       <div class="controls mobile-action-controls">
-        <button id="btn-submit" class="btn btn-primary" type="button" disabled>Play word</button>
-        <button id="btn-recall" class="btn" type="button" disabled>Recall</button>
-        <button id="btn-swap" class="btn" type="button" disabled>Swap&hellip;</button>
-        <button id="btn-shuffle" class="btn" type="button" title="Shuffle the order of your rack">Shuffle</button>
-        <button id="btn-zoom" class="btn zoom-btn" type="button" aria-pressed="false">Zoom</button>
-        <button id="btn-pass" class="btn" type="button" disabled>Pass</button>
-        <button id="btn-resign" class="btn btn-danger" type="button" hidden>Resign</button>
+        <button id="btn-submit" class="btn btn-primary" type="button" disabled title="Play word">&#10003; Play</button>
+        <button id="btn-recall" class="btn" type="button" disabled title="Recall tiles">&#8634; Recall</button>
+        <button id="btn-swap" class="btn" type="button" disabled title="Swap tiles">&#8646; Swap</button>
+        <button id="btn-shuffle" class="btn" type="button" title="Shuffle rack">&#128256; Shuffle</button>
+        <button id="btn-zoom" class="btn zoom-btn" type="button" aria-pressed="false" title="Zoom board">&#128269; Zoom</button>
+        <button id="btn-pass" class="btn" type="button" disabled title="Pass turn">&#9193; Pass</button>
+        <button id="btn-resign" class="btn btn-danger" type="button" hidden title="Resign">&#10005; Resign</button>
       </div>
     </div>
 
