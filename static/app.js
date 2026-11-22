@@ -1988,10 +1988,37 @@
     els.shareUrl.addEventListener('focus', () => els.shareUrl.select());
 
     // ---------- boot ----------
-    // The 27x19 board is small on a phone, so start zoomed there unless the player chose otherwise.
+    // The 27x19 board is small on a phone, so start zoomed there on mobile viewports (<= 700px) unless saved otherwise.
     const zoomPref = store.get(ZOOM_KEY);
-    if (zoomPref === '1') setZoom(true, { center: false });
-    else if (zoomPref === null && window.innerWidth <= 700) setZoom(true, { center: false, persist: false });
+    if (zoomPref === '1' || (zoomPref === null && window.innerWidth <= 700)) {
+      setZoom(true, { center: false, persist: zoomPref !== null });
+    }
+    // Also ensure pointer capture and robust event handling for board pan/zoom interactions.
+    const boardScrollEl = els.boardScroll;
+    if (boardScrollEl) {
+      boardScrollEl.addEventListener('pointerdown', (e) => {
+        if (e.pointerType !== 'mouse' && e.pointerType !== 'touch') return;
+        if (boardScrollEl.classList.contains('zoomed') && !e.target.closest('.tile.pending')) {
+          try {
+            boardScrollEl.setPointerCapture(e.pointerId);
+          } catch (_) { /* ignore if unsupported */ }
+        }
+      });
+      boardScrollEl.addEventListener('pointerup', (e) => {
+        try {
+          if (boardScrollEl.hasPointerCapture(e.pointerId)) {
+            boardScrollEl.releasePointerCapture(e.pointerId);
+          }
+        } catch (_) { /* ignore */ }
+      });
+      boardScrollEl.addEventListener('pointercancel', (e) => {
+        try {
+          if (boardScrollEl.hasPointerCapture(e.pointerId)) {
+            boardScrollEl.releasePointerCapture(e.pointerId);
+          }
+        } catch (_) { /* ignore */ }
+      });
+    }
     els.modeLabel.textContent = `${modeLabel(document.body.dataset.mode)} · ${LENGTH_LABEL[document.body.dataset.length] || ''}${timerShort(document.body.dataset.timer)}`;
     if (session.token) {
       startSocket(); // saved session token -> rejoin automatically
