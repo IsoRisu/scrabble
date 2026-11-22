@@ -38,7 +38,8 @@
 
     <!-- Floating Top-Right / Side Overlays -->
     <div class="floating-overlay-panel top-right-overlay">
-      <div id="players" class="players"></div>
+      <button id="btn-players-toggle" class="btn btn-small btn-players-toggle" type="button" aria-expanded="false">Players (<span id="player-count">1</span>)</button>
+      <div id="players" class="players collapsed"></div>
       <div class="bag-float">Tiles in bag: <b id="bag-count">&ndash;</b></div>
       <div id="timer" class="timer" aria-label="Turn timer"></div>
       <div class="timer-actions">
@@ -50,6 +51,7 @@
 
     <!-- Floating Bottom Rack & Action Controls Overlay -->
     <div class="floating-bottom-overlay">
+      <div class="rack-notice" id="rack-notice">Your rack appears when the game starts</div>
       <div id="preview" class="preview" aria-live="polite"></div>
       <div id="rack" class="rack" aria-label="Your tile rack"></div>
       <div class="controls">
