@@ -2,18 +2,17 @@
 
 ## What this run did
 
-- Phase 1/3 — Player Lobby CSS Refactor: Updated static/style
-- css to constrain the player lobby overlay, reduce player card sizes, limit visible player slots to 4 with a subtle waiting indicator, and implement horizontal scrolling for additional players on mobile view
-- Stopped before phase 2/3 (EditsFailed): The AI tried to delete a file that doesn't exist: `src/a
-- py` (delete): `src/a
-- py` does not exist in the repository — check the filename for typos
-- Check the filename for typos
+- Phase 1/3 — CSS Layout & Clutter Reduction Foundation: Refactored templates/game
+- html and static/style
+- css to introduce collapsible player list containers, streamline mobile viewport constraints, and ensure board visibility
+- Stopped before phase 2/3 (EditsFailed): The AI's edits could not be applied cleanly even after one repair round (`static/app
+- js` (replace): the new text contains an edit-block marker line (`>>>` or `<<<EDIT`); check block boundaries)
 - Nothing was committed
 
 ## What the next run should do
 
-- Player Lobby Client Logic: Modify static/app.js to render only active slots and the next available slot (max 4 visible), with subtle overflow indicators for larger lobbies.
-- Mobile UI Layout & Bottom Sheet Polish: Refine mobile layout rules in static/style.css and static/app.js to prevent the instructional banner and bottom sheet from completely blocking the game board.
+- Interactive UI Controls & Bottom Sheet/Tab Refactor: Modify static/app.js and templates/game.html to implement collapsible drawer / tab interactions for the player list, tile tracker, and instructions banner, optimizing touch targets and screen space for mobile users.
+- Polish & Responsiveness Tuning: Refine CSS styling in static/style.css and touch/drag behavior in static/app.js for seamless mobile usability, updating README.md and documentation notes if required.
 
 ## How to verify
 

@@ -37,7 +37,11 @@
     <div id="turn-banner" class="turn-banner floating-turn" role="status" aria-live="polite">Connecting&hellip;</div>
 
     <!-- Floating Top-Right / Side Overlays -->
-    <div class="floating-overlay-panel top-right-overlay">
+    <div id="players-overlay-panel" class="floating-overlay-panel top-right-overlay">
+      <div class="overlay-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+        <span style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: var(--muted);">Players</span>
+        <button id="btn-toggle-players" class="overlay-toggle-btn" type="button" aria-expanded="true" aria-label="Toggle player list">&#9650; Hide</button>
+      </div>
       <div id="players" class="players"></div>
       <div class="bag-float">Tiles in bag: <b id="bag-count">&ndash;</b></div>
       <div id="timer" class="timer" aria-label="Turn timer"></div>
