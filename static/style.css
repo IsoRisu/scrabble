@@ -941,4 +941,31 @@ button, .btn, .icon-btn, select, input[type="text"], .tile, .cell.can-drop {
   padding: 4px 10px;
   font-size: 12px;
   font-weight: 800;
+}/* ==========================================================================
+ * Unified Scrollable Drawer & Cog Menu Integration Styles
+ * ========================================================================== */
+.unified-scrollable-drawer {
+  max-height: 60vh;
+  transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.unified-drawer-scroll-body {
+  max-height: 52vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.unified-drawer-secondary-section {
+  margin-top: 12px;
+  border-top: 2px dashed var(--panel-border);
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.drawer-toggle-btn {
+  min-height: 48px;
+  min-width: 48px;
 }

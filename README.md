@@ -7,7 +7,7 @@ on the server (the single source of truth), vanilla JS/HTML/CSS on the client
 ## Features
 
 - Server-authoritative 15x15 board, standard 100-tile bag, 7-tile racks, scores, turn order.
-- **Mobile UI & Clutter Reduction Layout (Phase 3 Verified)**: Maximizes board visibility via full-viewport layout, a collapsible top-right player drawer/overlay, and a bottom sheet for tile rack and action controls with responsive touch drag-and-drop support.
+- **Mobile UI & Clutter Reduction Layout (Phase 3 Verified)**: Maximizes board visibility via full-viewport layout, a collapsible top-right player drawer/overlay, unified scrollable drawer accessible via cog menu, and a contextual action bar with intelligent ghosting/transparency for disabled buttons and responsive touch drag-and-drop support.
 - Rooms: `POST /create` returns an 8-character code and a shareable `/join/<code>` URL.
 - Placement rules (first word covers the centre, later words connect, one line, no gaps),
   dictionary check, premium squares (DL/TL/DW/TW), 50-point bingo for using all 7 tiles.
@@ -20,7 +20,7 @@ on the server (the single source of truth), vanilla JS/HTML/CSS on the client
   dropping the connection puts you back in your seat.
 - **Resign** at any time (with a confirmation). Two players: the opponent wins. More: your tiles go back
   into the bag and the others play on; the last player standing wins.
-- **Mobile UI & Clutter Reduction Layout**: Maximizes board visibility via full-viewport layout, a collapsible top-right player drawer/overlay, and a bottom sheet for tile rack and action controls with responsive touch drag-and-drop support.
+- **Mobile UX & Accessibility**: Fully polished touch interactions, drag-and-drop support, minimum 48x48px touch targets, WCAG-compliant contrast ratios, and unified scrollable drawers.
 - **Tile tracker**: bag size, vowels, consonants and blanks you have not seen, plus a per-letter list (the
   bag plus your opponents' racks). Once the bag is empty it shows your opponents' exact tiles.
 - Words in the move list link to an online dictionary (Wiktionary, in the room's language).

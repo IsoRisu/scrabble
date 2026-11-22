@@ -1059,20 +1059,41 @@
         document.body.classList.add('game-active');
       }
 
-      els.submit.disabled = !(edit && hasPending && previewOk && local.inflight === 0 && !busy);
+      const submitDisabled = !(edit && hasPending && previewOk && local.inflight === 0 && !busy);
+      const recallDisabled = !((edit || staging) && hasPending);
+      const swapDisabled = !(edit && S.bag_count >= config.rack_size && !busy);
+      const passDisabled = !(myTurn() && !busy);
+      const shuffleDisabled = waiting || S.rack.length < 2;
+      const challengeDisabled = !(S.can_challenge && !busy);
+      const resignDisabled = busy;
+
+      els.submit.disabled = submitDisabled;
+      els.submit.classList.toggle('btn-ghost', submitDisabled);
       els.submit.textContent = staging && hasPending ? 'Staged – plays on your turn' : 'Play word';
       els.submit.title = staging && hasPending ? 'Your staged word loads on your turn; then press Play word.' : '';
-      els.recall.disabled = !((edit || staging) && hasPending);
-      els.swap.disabled = !(edit && S.bag_count >= config.rack_size && !busy);
-      els.shuffle.disabled = waiting || S.rack.length < 2;
+
+      els.recall.disabled = recallDisabled;
+      els.recall.classList.toggle('btn-ghost', recallDisabled);
+
+      els.swap.disabled = swapDisabled;
+      els.swap.classList.toggle('btn-ghost', swapDisabled);
       els.swap.title = S.bag_count < config.rack_size ? 'Fewer than 7 tiles left in the bag' : '';
-      els.pass.disabled = !(myTurn() && !busy);
+
+      els.pass.disabled = passDisabled;
+      els.pass.classList.toggle('btn-ghost', passDisabled);
       els.pass.textContent = S.awaiting_final ? 'Accept & end game' : 'Pass Turn';
+
+      els.shuffle.disabled = shuffleDisabled;
+      els.shuffle.classList.toggle('btn-ghost', shuffleDisabled);
+
       els.challenge.hidden = S.rules !== 'challenge';
-      els.challenge.disabled = !(S.can_challenge && !busy);
+      els.challenge.disabled = challengeDisabled;
+      els.challenge.classList.toggle('btn-ghost', challengeDisabled);
+
       const me = S.players[S.you];
       els.resign.hidden = !(S.status === 'playing' && me && !me.resigned);
-      els.resign.disabled = busy;
+      els.resign.disabled = resignDisabled;
+      els.resign.classList.toggle('btn-ghost', resignDisabled);
     }
 
     // ---------- tile tracker: what has not been played and is not on my rack ----------
@@ -1861,11 +1882,48 @@
     els.settingsBtn.addEventListener('click', openSettingsModal);
     if (els.cogBtn) {
       els.cogBtn.addEventListener('click', () => {
-        if (els.settingsOverlay) {
+        const secondarySec = $('unified-drawer-secondary-section');
+        const bottomSheet = document.querySelector('.floating-bottom-overlay');
+        if (secondarySec && bottomSheet) {
+          bottomSheet.classList.remove('collapsed-drawer');
+          const toggleBtn = $('btn-toggle-drawer');
+          if (toggleBtn) {
+            toggleBtn.setAttribute('aria-expanded', 'true');
+            toggleBtn.textContent = '▲ Hide Drawer';
+          }
+          secondarySec.hidden = !secondarySec.hidden;
+          const trackerEl = $('tracker');
+          if (trackerEl && !secondarySec.hidden) {
+            trackerEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }
+        } else if (els.settingsOverlay) {
           els.settingsOverlay.hidden = false;
         } else {
           openSettingsModal();
         }
+      });
+    }
+    const drawerStatsToggle = $('btn-drawer-tracker-toggle');
+    if (drawerStatsToggle) {
+      drawerStatsToggle.addEventListener('click', () => {
+        const secondarySec = $('unified-drawer-secondary-section');
+        if (secondarySec) {
+          secondarySec.hidden = !secondarySec.hidden;
+          if (!secondarySec.hidden) {
+            const trackerEl = $('tracker');
+            if (trackerEl) trackerEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }
+        }
+      });
+    }
+    const drawerToggleBtn = $('btn-toggle-drawer');
+    const bottomSheetEl = document.querySelector('.floating-bottom-overlay');
+    if (drawerToggleBtn && bottomSheetEl) {
+      drawerToggleBtn.addEventListener('click', () => {
+        bottomSheetEl.classList.toggle('collapsed-drawer');
+        const isCollapsed = bottomSheetEl.classList.contains('collapsed-drawer');
+        drawerToggleBtn.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
+        drawerToggleBtn.textContent = isCollapsed ? '▼ Show Drawer' : '▲ Hide Drawer';
       });
     }
     if (els.closeSettings && els.settingsOverlay) {
