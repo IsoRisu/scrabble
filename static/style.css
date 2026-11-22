@@ -702,3 +702,63 @@ body[data-page="game"] {
   max-height: 85vh;
   overflow-y: auto;
 }
+/* ---------- Bottom Sheet Compact Status Bar ---------- */
+.bottom-sheet-status {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  text-align: center;
+  margin-bottom: 2px;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Collapsible / Streamlined Players Overlay for Mobile */
+.floating-overlay-panel {
+  transition: max-height 0.2s ease, padding 0.2s ease;
+}
+
+.floating-overlay-panel.collapsed .players,
+.floating-overlay-panel.collapsed .bag-float,
+.floating-overlay-panel.collapsed .timer-actions {
+  display: none !important;
+}
+
+.overlay-toggle-btn {
+  background: transparent;
+  border: none;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--ink);
+  cursor: pointer;
+  padding: 2px 4px;
+  text-align: right;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+@media (max-width: 700px) {
+  .floating-overlay-panel {
+    max-width: min(240px, calc(100vw - 24px));
+    padding: 6px 8px;
+    top: 60px;
+    right: 10px;
+  }
+  .floating-overlay-panel .players {
+    max-height: 120px;
+  }
+  .floating-bottom-overlay {
+    width: min(98vw, 640px);
+    padding: 8px 10px 10px;
+  }
+  .floating-bottom-overlay .controls .btn {
+    padding: 6px 10px;
+    min-height: 34px;
+    font-size: 12px;
+  }
+}
+>
