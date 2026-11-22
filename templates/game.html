@@ -49,18 +49,27 @@
       <button id="btn-challenge" class="btn btn-danger btn-small" type="button" hidden>Challenge</button>
     </div>
 
-    <div class="floating-bottom-overlay mobile-bottom-sheet">
-      <div class="bottom-sheet-status" id="bottom-sheet-status-text">Your rack appears when the game starts</div>
-      <div id="preview" class="preview" aria-live="polite"></div>
-      <div id="rack" class="rack" aria-label="Your tile rack" tabindex="0"></div>
-      <div class="controls mobile-action-controls">
-        <button id="btn-submit" class="btn btn-primary" type="button" disabled title="Play word">&#10003; Play</button>
-        <button id="btn-recall" class="btn" type="button" disabled title="Recall tiles">&#8634; Recall</button>
-        <button id="btn-swap" class="btn" type="button" disabled title="Swap tiles">&#8646; Swap</button>
-        <button id="btn-shuffle" class="btn" type="button" title="Shuffle rack">&#128256; Shuffle</button>
-        <button id="btn-zoom" class="btn zoom-btn" type="button" aria-pressed="false" title="Zoom board">&#128269; Zoom</button>
-        <button id="btn-pass" class="btn" type="button" disabled title="Pass turn">&#9193; Pass</button>
-        <button id="btn-resign" class="btn btn-danger" type="button" hidden title="Resign">&#10005; Resign</button>
+    <div class="floating-bottom-overlay mobile-bottom-sheet" role="region" aria-label="Game controls and tile rack">
+      <div class="bottom-sheet-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 4px;">
+        <div class="bottom-sheet-status" id="bottom-sheet-status-text">Your rack appears when the game starts</div>
+        <button id="btn-toggle-drawer" class="overlay-toggle-btn drawer-toggle-btn" type="button" aria-expanded="true" aria-label="Toggle collapsible drawer">&#9650; Hide Drawer</button>
+      </div>
+      <div class="collapsible-drawer-content">
+        <div id="preview" class="preview" aria-live="polite"></div>
+        <div id="rack" class="rack" aria-label="Your tile rack" tabindex="0"></div>
+        <div class="contextual-action-bar controls mobile-action-controls">
+          <button id="btn-submit" class="btn btn-primary" type="button" disabled title="Play word">&#10003; Play</button>
+          <button id="btn-recall" class="btn" type="button" disabled title="Recall tiles">&#8634; Recall</button>
+          <button id="btn-swap" class="btn" type="button" disabled title="Swap tiles">&#8646; Swap</button>
+          <button id="btn-shuffle" class="btn" type="button" title="Shuffle rack">&#128256; Shuffle</button>
+          <button id="btn-zoom" class="btn zoom-btn" type="button" aria-pressed="false" title="Zoom board">&#128269; Zoom</button>
+          <button id="btn-pass" class="btn" type="button" disabled title="Pass turn">&#9193; Pass</button>
+          <button id="btn-resign" class="btn btn-danger" type="button" hidden title="Resign">&#10005; Resign</button>
+          <div class="overflow-menu-wrap" hidden>
+            <button id="btn-overflow-toggle" class="btn icon-btn" type="button" aria-haspopup="true" aria-expanded="false" title="More actions">&#8943;</button>
+            <div id="overflow-dropdown" class="overflow-dropdown" hidden></div>
+          </div>
+        </div>
       </div>
     </div>
 
