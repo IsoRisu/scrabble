@@ -856,3 +856,89 @@ body.game-active .bottom-sheet-status {
   }
 }
 >
+/* ==========================================================================
+ * Phase 1 Accessibility & UX Foundations: Touch Targets, Contrast, & Layout
+ * ========================================================================== */
+
+:root {
+  --wcag-min-touch: 48px;
+  --high-contrast-ink: #200d05;
+  --high-contrast-muted: #623624;
+}
+
+/* Guarantee minimum touch target dimensions of 48x48px across all interactive elements */
+button, .btn, .icon-btn, select, input[type="text"], .tile, .cell.can-drop {
+  min-width: var(--wcag-min-touch);
+  min-height: var(--wcag-min-touch);
+}
+
+.icon-btn {
+  width: 48px;
+  height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Improved color contrast for buttons and text to meet or exceed WCAG AA/AAA standards */
+.btn {
+  color: var(--high-contrast-ink);
+  border-color: var(--panel-border);
+  font-weight: 800;
+}
+
+.btn-primary {
+  background: #200d05;
+  color: #ffffff;
+  border-color: #000000;
+}
+
+.btn-danger {
+  background: #b52b16;
+  color: #ffffff;
+  border-color: #72190c;
+}
+
+.modal p, .hint, .form-error, .modal-info li, .bottom-sheet-status {
+  color: var(--high-contrast-muted);
+}
+
+/* Base styles for the new collapsible drawer and contextual action bar */
+.mobile-bottom-sheet {
+  transition: max-height 0.25s cubic-bezier(0.4, 0, 0.2, 1), padding 0.25s ease;
+}
+
+.mobile-bottom-sheet.collapsed-drawer .collapsible-drawer-content {
+  display: none !important;
+}
+
+.mobile-bottom-sheet.collapsed-drawer {
+  max-height: 54px !important;
+  overflow: hidden;
+  padding-bottom: 6px !important;
+}
+
+.contextual-action-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+}
+
+/* Ghosting / disabled transparency states for contextual action bar */
+.contextual-action-bar .btn:disabled,
+.contextual-action-bar button[disabled] {
+  opacity: 0.25;
+  pointer-events: none;
+  filter: grayscale(40%);
+}
+
+.drawer-toggle-btn {
+  min-height: 36px;
+  min-width: 44px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 800;
+}
