@@ -804,9 +804,10 @@
     }
 
     function renderPlayers() {
-      els.players.replaceChildren();
-      const total = Math.max(S.players.length, S.max_players || 2);
-      els.players.classList.toggle('many', total > 4);  // compact two-column cards for big games
+      const totalActive = S.players.length;
+      const showPlaceholder = S.status === 'waiting' && totalActive < (S.max_players || 2);
+      const totalSlots = totalActive + (showPlaceholder ? 1 : 0);
+      els.players.classList.toggle('many', totalSlots > 4);
 
       let overlayPanel = document.querySelector('.floating-overlay-panel');
       const toggleBtn = document.getElementById('btn-toggle-players');
@@ -816,49 +817,114 @@
           overlayPanel.classList.toggle('collapsed');
           const isCollapsed = overlayPanel.classList.contains('collapsed');
           toggleBtn.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
-          toggleBtn.textContent = isCollapsed ? `▼ Players (${S.players.length})` : '▲ Hide';
+          toggleBtn.textContent = isCollapsed ? `▼ Players (${totalActive})` : '▲ Hide';
         });
       }
       if (toggleBtn && overlayPanel) {
         const isCollapsed = overlayPanel.classList.contains('collapsed');
-        toggleBtn.textContent = isCollapsed ? `▼ Players (${S.players.length})` : '▲ Hide';
+        toggleBtn.textContent = isCollapsed ? `▼ Players (${totalActive})` : '▲ Hide';
       }
 
-      // Compact icons / shortened text for buttons if on mobile or compact view
-      if (els.submit) els.submit.textContent = '✓';
-      if (els.recall) els.recall.textContent = '↺';
-      if (els.swap) els.swap.textContent = '⇄';
-      if (els.shuffle) els.shuffle.textContent = '🔀';
-      if (els.zoom) els.zoom.textContent = '🔍';
-      if (els.pass) els.pass.textContent = S.awaiting_final ? '✔ End' : '⏭';
-
-      for (const p of S.players) {
+      // DOM Node Recycling: update existing player cards or create/remove as needed
+      const existingCards = Array.from(els.players.children);
+      
+      // Update or create active player cards
+      S.players.forEach((p, index) => {
         const active = S.status === 'playing' && S.current === p.seat;
-        const minis = h('span', { class: 'mini-tiles' });
-        for (let i = 0; i < p.rack_count; i += 1) minis.append(h('i'));
-        const card = h('div', { class: `player-card${active ? ' active' : ''}${p.resigned ? ' resigned' : ''}` },
-          h('div', { class: 'name' },
+        let card = existingCards[index];
+        
+        if (!card || card.classList.contains('waiting') !== false && !card.dataset.playerSeat) {
+          card = h('div', { class: 'player-card' });
+          card.dataset.playerSeat = String(p.seat);
+          if (existingCards[index]) {
+            els.players.replaceChild(card, existingCards[index]);
+          } else {
+            els.players.append(card);
+          }
+        }
+        
+        card.className = `player-card${active ? ' active' : ''}${p.resigned ? ' resigned' : ''}`;
+        card.style.setProperty('--seat-hue', String(seatHue(p.seat)));
+        card.dataset.playerSeat = String(p.seat);
+
+        // Update name part
+        let nameEl = card.querySelector('.name');
+        if (!nameEl) {
+          nameEl = h('div', { class: 'name' },
             h('span', { class: `dot${p.connected ? ' on' : ''}`, title: p.connected ? 'Online' : 'Offline' }),
             h('span', { class: 'nm', text: p.name }),
             p.seat === S.you ? h('span', { class: 'you', text: 'you' }) : null,
-            p.resigned ? h('span', { class: 'you', text: 'resigned' }) : null),
-          h('div', { class: 'score', text: String(p.score) }),
-          h('div', { class: 'racks' }, minis, `${p.rack_count} tile${p.rack_count === 1 ? '' : 's'}`));
-        card.style.setProperty('--seat-hue', String(seatHue(p.seat)));
-        if (S.skippable === p.seat) {
-          // Offline for a while and holding everybody up: anyone else may pass for them.
-          card.append(h('button', {
-            class: 'btn btn-skip', type: 'button', text: 'Skip (offline)',
-            title: `${p.name} has been offline for a while. Pass for them so the game can go on.`,
-            onclick: () => act('skip_player', { seat: p.seat }, () => toast(`${p.name} was skipped.`)),
-          }));
+            p.resigned ? h('span', { class: 'you', text: 'resigned' }) : null
+          );
+          card.prepend(nameEl);
+        } else {
+          const dot = nameEl.querySelector('.dot');
+          if (dot) dot.className = `dot${p.connected ? ' on' : ''}`;
+          const nm = nameEl.querySelector('.nm');
+          if (nm) nm.textContent = p.name;
+          let youSpan = nameEl.querySelector('.you');
+          if (p.seat === S.you && !youSpan) {
+            nameEl.append(h('span', { class: 'you', text: 'you' }));
+          } else if (p.seat !== S.you && youSpan && youSpan.textContent === 'you') {
+            youSpan.remove();
+          }
         }
-        els.players.append(card);
+
+        // Update score
+        let scoreEl = card.querySelector('.score');
+        if (!scoreEl) {
+          scoreEl = h('div', { class: 'score', text: String(p.score) });
+          card.append(scoreEl);
+        } else {
+          scoreEl.textContent = String(p.score);
+        }
+
+        // Update racks & mini tiles
+        let racksEl = card.querySelector('.racks');
+        const minis = h('span', { class: 'mini-tiles' });
+        for (let i = 0; i < p.rack_count; i += 1) minis.append(h('i'));
+        if (!racksEl) {
+          racksEl = h('div', { class: 'racks' }, minis, `${p.rack_count} tile${p.rack_count === 1 ? '' : 's'}`);
+          card.append(racksEl);
+        } else {
+          racksEl.replaceChildren(minis, `${p.rack_count} tile${p.rack_count === 1 ? '' : 's'}`);
+        }
+
+        // Update skippable button
+        let skipBtn = card.querySelector('.btn-skip');
+        if (S.skippable === p.seat) {
+          if (!skipBtn) {
+            skipBtn = h('button', {
+              class: 'btn btn-skip', type: 'button', text: 'Skip (offline)',
+              title: `${p.name} has been offline for a while. Pass for them so the game can go on.`,
+              onclick: () => act('skip_player', { seat: p.seat }, () => toast(`${p.name} was skipped.`)),
+            });
+            card.append(skipBtn);
+          }
+        } else if (skipBtn) {
+          skipBtn.remove();
+        }
+      });
+
+      // Handle single placeholder slot if waiting
+      let placeholderEl = existingCards[S.players.length];
+      if (showPlaceholder) {
+        if (!placeholderEl || !placeholderEl.classList.contains('waiting')) {
+          placeholderEl = h('div', { class: 'player-card waiting' },
+            h('div', { class: 'name' }, h('span', { class: 'dot' }), h('span', { class: 'nm', text: 'Waiting for player…' })),
+            h('div', { class: 'score', text: '–' }));
+          placeholderEl.dataset.placeholder = 'true';
+          if (els.players.children[S.players.length]) {
+            els.players.replaceChild(placeholderEl, els.players.children[S.players.length]);
+          } else {
+            els.players.append(placeholderEl);
+          }
+        }
       }
-      for (let i = S.players.length; i < (S.max_players || 2); i += 1) {
-        els.players.append(h('div', { class: 'player-card waiting' },
-          h('div', { class: 'name' }, h('span', { class: 'dot' }), h('span', { class: 'nm', text: 'Waiting for player…' })),
-          h('div', { class: 'score', text: '–' })));
+
+      // Trim excess child nodes beyond active + placeholder
+      while (els.players.children.length > totalSlots) {
+        els.players.lastElementChild.remove();
       }
     }
 
