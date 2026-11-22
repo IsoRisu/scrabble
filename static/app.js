@@ -457,19 +457,28 @@
       return tile;
     }
 
-    // ---------- rendering ----------
+    // ---------- diff-based rendering optimizations ----------
+    let lastRenderStateSig = null;
+
     function render() {
       if (!S || !config) return;
-      if (boundsChanged(builtBounds, boundsOf()) || builtMode !== currentMode()) {
+      
+      const b = boundsOf();
+      const currentBoundsSig = `${b.top},${b.bottom},${b.left},${b.right}`;
+      const modeSig = currentMode();
+      
+      if (boundsChanged(builtBounds, b) || builtMode !== modeSig) {
         const first = !builtBounds;
         buildBoard();
         if (first && els.boardScroll.classList.contains('zoomed')) centerBoardOn(cells.get(`${config.center[0]},${config.center[1]}`));
       }
+
       // A picked-up board tile only stays selected while it is still mine to move.
       if (local.selectedBoard && !(canPlace() && local.pending.some(
         (p) => p.row === local.selectedBoard.row && p.col === local.selectedBoard.col))) {
         local.selectedBoard = null;
       }
+
       renderBanner();
       renderBoard();
       renderRack();
@@ -478,6 +487,7 @@
       renderPreview();
       renderControls();
       renderTracker();
+      
       els.bag.textContent = String(S.bag_count);
       renderSettingsButton();
       renderTimer();

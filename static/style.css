@@ -430,29 +430,84 @@ body {
 .modal-info li { margin: 5px 0; }
 .modal .field select { width: 100%; }
 
-/* ---------- phones ---------- */
+/* ---------- phones & responsive safe area layouts ---------- */
 /* "Zoom board": squares grow to a comfortable size and the board scrolls inside its frame. */
 .board-scroll.zoomed {
   overflow: auto; max-height: min(68vh, 560px);
   -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
   background: var(--bg-2);
 }
-.board-scroll.zoomed .board { touch-action: pan-x pan-y; /* the browser pans; app.js handles the pinch */ }
+.board-scroll.zoomed .board { touch-action: pan-x pan-y; }
 .board-scroll.zoomed .board { width: calc(var(--zoom-cell) * var(--cols) + 3px * (var(--cols) - 1) + 12px); max-width: none; min-width: 0; margin: 0 auto; will-change: width; }
+
+/* Pure CSS Viewport Grid for Board & Control Areas */
+.game-viewport {
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  grid-template-columns: 100vw;
+  box-sizing: border-box;
+}
+
+/* Bottom sheets & drawers incorporate safe-area-inset-bottom */
+.floating-bottom-overlay,
+.mobile-bottom-sheet,
+.rack {
+  padding-bottom: max(10px, env(safe-area-inset-bottom));
+  margin-bottom: env(safe-area-inset-bottom);
+}
 
 @media (max-width: 700px) {
   /* Keep the rack reachable while the board is zoomed or the page is scrolled. */
-  .rack { position: sticky; bottom: 8px; z-index: 20; }
+  .rack { position: sticky; bottom: max(8px, env(safe-area-inset-bottom)); z-index: 20; }
 
   .controls .btn { flex: 1 1 140px; }
   .turn-panel .btn { min-width: 160px; }
+
+  /* Collapse player grid into a compact 2-column card layout or horizontal scrollable pill list */
+  .players {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    overflow-y: auto;
+    max-height: 140px;
+  }
+  .player-card {
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+  .player-card .score {
+    font-size: 18px;
+  }
+  .player-card .mini-tiles {
+    display: none;
+  }
 }
 
 @media (max-width: 520px) {
   .topbar { flex-wrap: wrap; gap: 6px 12px; }
-  .rack { gap: 3px; padding: 8px 6px; }
+  .rack { gap: 3px; padding: 8px 6px max(8px, env(safe-area-inset-bottom)); }
   .letter-grid { grid-template-columns: repeat(6, 1fr); }
-  .layout { padding: 10px 12px 40px; }
+  .layout { padding: 10px 12px calc(40px + env(safe-area-inset-bottom)); }
+
+  /* Compact 2-column cards / horizontal scrollable pill list for player grid at <= 520px */
+  .players {
+    display: flex;
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+    gap: 8px;
+    padding-bottom: 4px;
+    max-height: none;
+    scrollbar-width: thin;
+  }
+  .player-card {
+    flex: 0 0 auto;
+    min-width: 130px;
+    padding: 6px 10px;
+  }
 }
 
 
