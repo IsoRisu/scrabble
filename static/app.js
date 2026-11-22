@@ -807,24 +807,21 @@
       els.players.replaceChildren();
       const total = Math.max(S.players.length, S.max_players || 2);
       els.players.classList.toggle('many', total > 4);  // compact two-column cards for big games
-      
-      // Ensure the floating overlay panel has a collapse/expand toggle if many players or on small screens
+
       let overlayPanel = document.querySelector('.floating-overlay-panel');
-      if (overlayPanel && !overlayPanel.querySelector('.overlay-toggle-btn')) {
-        const toggleBtn = h('button', {
-          class: 'overlay-toggle-btn',
-          type: 'button',
-          text: '▲ Players',
-          onclick: () => {
-            overlayPanel.classList.toggle('collapsed');
-            toggleBtn.textContent = overlayPanel.classList.contains('collapsed') ? '▼ Players (' + S.players.length + ')' : '▲ Players';
-          }
+      const toggleBtn = document.getElementById('btn-toggle-players');
+      if (toggleBtn && overlayPanel && !toggleBtn._wired) {
+        toggleBtn._wired = true;
+        toggleBtn.addEventListener('click', () => {
+          overlayPanel.classList.toggle('collapsed');
+          const isCollapsed = overlayPanel.classList.contains('collapsed');
+          toggleBtn.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
+          toggleBtn.textContent = isCollapsed ? `▼ Players (${S.players.length})` : '▲ Hide';
         });
-        overlayPanel.prepend(toggleBtn);
       }
-      const toggleBtn = overlayPanel ? overlayPanel.querySelector('.overlay-toggle-btn') : null;
-      if (toggleBtn && overlayPanel.classList.contains('collapsed')) {
-        toggleBtn.textContent = `▼ Players (${S.players.length})`;
+      if (toggleBtn && overlayPanel) {
+        const isCollapsed = overlayPanel.classList.contains('collapsed');
+        toggleBtn.textContent = isCollapsed ? `▼ Players (${S.players.length})` : '▲ Hide';
       }
 
       for (const p of S.players) {

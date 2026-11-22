@@ -19,6 +19,7 @@ on the server (the single source of truth), vanilla JS/HTML/CSS on the client
   dropping the connection puts you back in your seat.
 - **Resign** at any time (with a confirmation). Two players: the opponent wins. More: your tiles go back
   into the bag and the others play on; the last player standing wins.
+- **Mobile UI & Clutter Reduction Layout**: Maximizes board visibility via full-viewport layout, a collapsible top-right player drawer/overlay, and a bottom sheet for tile rack and action controls with responsive touch drag-and-drop support.
 - **Tile tracker**: bag size, vowels, consonants and blanks you have not seen, plus a per-letter list (the
   bag plus your opponents' racks). Once the bag is empty it shows your opponents' exact tiles.
 - Words in the move list link to an online dictionary (Wiktionary, in the room's language).
