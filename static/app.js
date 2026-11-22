@@ -951,12 +951,30 @@
       const staging = !edit && canStage();
       const hasPending = local.pending.length > 0;
       const previewOk = !S.preview || S.preview.ok;
+      const waiting = S && S.status === 'waiting';
+
+      // Toggle visibility/minimized state based on game start status
+      const actionControlsEl = document.querySelector('.mobile-action-controls');
+      const bottomSheet = document.querySelector('.floating-bottom-overlay');
+      const statusTextEl = document.getElementById('bottom-sheet-status-text');
+      if (waiting) {
+        if (actionControlsEl) actionControlsEl.style.display = 'none';
+        if (bottomSheet) bottomSheet.classList.add('game-not-started');
+        if (statusTextEl) statusTextEl.style.display = 'block';
+        document.body.classList.remove('game-active');
+      } else {
+        if (actionControlsEl) actionControlsEl.style.display = '';
+        if (bottomSheet) bottomSheet.classList.remove('game-not-started');
+        if (statusTextEl) statusTextEl.style.display = 'none';
+        document.body.classList.add('game-active');
+      }
+
       els.submit.disabled = !(edit && hasPending && previewOk && local.inflight === 0 && !busy);
       els.submit.textContent = staging && hasPending ? 'Staged – plays on your turn' : 'Play word';
       els.submit.title = staging && hasPending ? 'Your staged word loads on your turn; then press Play word.' : '';
       els.recall.disabled = !((edit || staging) && hasPending);
       els.swap.disabled = !(edit && S.bag_count >= config.rack_size && !busy);
-      els.shuffle.disabled = S.status === 'waiting' || S.rack.length < 2;
+      els.shuffle.disabled = waiting || S.rack.length < 2;
       els.swap.title = S.bag_count < config.rack_size ? 'Fewer than 7 tiles left in the bag' : '';
       els.pass.disabled = !(myTurn() && !busy);
       els.pass.textContent = S.awaiting_final ? 'Accept & end game' : 'Pass Turn';

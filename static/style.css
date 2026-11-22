@@ -658,22 +658,30 @@ body[data-page="game"] {
 /* Floating Bottom Overlay (Rack & Controls) */
 .floating-bottom-overlay {
   position: fixed;
-  bottom: 10px;
+  bottom: 8px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 100;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  width: min(96vw, 760px);
-  background: rgba(255, 243, 223, 0.94);
+  gap: 4px;
+  width: min(98vw, 720px);
+  background: rgba(255, 243, 223, 0.96);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   border: 2px solid var(--panel-border);
-  border-radius: 20px;
-  padding: 10px 14px 12px;
-  box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.25);
+  border-radius: 16px;
+  padding: 8px 12px 10px;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.22);
+  max-height: 42vh;
+  overflow-y: auto;
+}
+
+.mobile-bottom-sheet.collapsed-sheet .preview,
+.mobile-bottom-sheet.collapsed-sheet .rack,
+.mobile-bottom-sheet.collapsed-sheet .controls {
+  display: none !important;
 }
 
 .floating-bottom-overlay .rack {
@@ -690,6 +698,25 @@ body[data-page="game"] {
   padding: 8px 12px;
   min-height: 38px;
   font-size: 13px;
+}
+
+/* Hide or minimize action buttons before game starts */
+.game-not-started .mobile-action-controls,
+.game-not-started .preview,
+body:not(.game-active) .mobile-action-controls {
+  display: none !important;
+}
+
+.game-not-started .bottom-sheet-status {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+  padding: 4px 0;
+}
+
+body.game-active .bottom-sheet-status {
+  display: none !important;
 }
 
 .cog-btn {
