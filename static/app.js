@@ -824,6 +824,14 @@
         toggleBtn.textContent = isCollapsed ? `▼ Players (${S.players.length})` : '▲ Hide';
       }
 
+      // Compact icons / shortened text for buttons if on mobile or compact view
+      if (els.submit) els.submit.textContent = '✓';
+      if (els.recall) els.recall.textContent = '↺';
+      if (els.swap) els.swap.textContent = '⇄';
+      if (els.shuffle) els.shuffle.textContent = '🔀';
+      if (els.zoom) els.zoom.textContent = '🔍';
+      if (els.pass) els.pass.textContent = S.awaiting_final ? '✔ End' : '⏭';
+
       for (const p of S.players) {
         const active = S.status === 'playing' && S.current === p.seat;
         const minis = h('span', { class: 'mini-tiles' });
