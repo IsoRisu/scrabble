@@ -602,7 +602,7 @@ body[data-page="game"] {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-width: 260px;
+  max-width: 280px;
   background: rgba(255, 243, 223, 0.92);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
@@ -614,13 +614,35 @@ body[data-page="game"] {
   overflow-y: auto;
 }
 
+/* Mobile Player Lobby Refactor: Limit visible slots to max 4 with compact scroll or indicator */
 .floating-overlay-panel .players {
+  display: flex;
+  flex-direction: column;
   gap: 6px;
+  max-height: calc(4 * 46px + 18px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+@media (max-width: 700px) {
+  .floating-overlay-panel .players {
+    max-height: 180px;
+    overflow-y: auto;
+  }
 }
 
 .floating-overlay-panel .player-card {
-  padding: 6px 10px;
-  font-size: 13px;
+  padding: 5px 8px;
+  font-size: 12px;
+  min-height: 36px;
+}
+
+.floating-overlay-panel .player-card .score {
+  font-size: 18px;
+}
+
+.floating-overlay-panel .player-card .mini-tiles {
+  display: none;
 }
 
 .bag-float {
