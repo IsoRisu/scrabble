@@ -48,7 +48,7 @@ Tile tracker: every view carries ``tiles`` - the tiles the player has not seen (
         empty that is exactly the opponents' tiles.
 
 Board layouts: Classic uses the standard premium squares; Wild uses the Letter League
-        layout from ``wild_rules.txt`` (no triple-word squares, see game/scoring.py).
+        matrix (25x25, see game/scoring.py).
 
 Staging (prep during the opponent's turn)
 -----------------------------------------
@@ -67,8 +67,8 @@ import threading
 import time
 from dataclasses import dataclass, field
 
-from .board import BOARD_COLS, BOARD_ROWS, BOARD_SIZE, Board, GameError, Placement, classic_bounds, initial_bounds
-from .scoring import BINGO_BONUS, PERIOD, PREMIUM, WILD_PREMIUM, letter_boost, score_move, word_factor
+from .board import BOARD_COLS, BOARD_ROWS, BOARD_SIZE, CENTER, WILD_CENTER, Board, GameError, Placement, classic_bounds, initial_bounds
+from .scoring import BINGO_BONUS, PERIOD, PREMIUM, WILD_PERIOD, WILD_PREMIUM, letter_boost, score_move, word_factor
 from .tiles import BLANK, LANGUAGES, RACK_SIZE, TILE_DISTRIBUTIONS, TILE_VALUES, VOWELS, new_bag, tile_value
 
 ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no 0/O/1/I
@@ -96,7 +96,7 @@ RULES = tuple(MODE_RULES.values())
 TIMERS = {"off": 0, "30s": 30, "60s": 60, "90s": 90, "2m": 120, "3m": 180, "5m": 300}
 DEFAULT_TIMER = "off"
 DEFAULT_LANGUAGE = "en"
-# Auto board expansion: the board starts as 27x19 and, when a tile lands within
+# Auto board expansion: the Wild board starts as 25x25 and, when a tile lands within
 # `expand_margin` rings of an edge, grows so that many empty rings surround all
 # tiles.  The default margin equals the rack size, so a full-rack word can always
 # be laid out away from any tile.  On by default in Wild only: Classic is the
@@ -114,9 +114,11 @@ CONFIG = {
     "bounds": initial_bounds(),  # Wild; Classic uses "classic_bounds"
     "classic_bounds": classic_bounds(),
     "premium_period": PERIOD,
+    "wild_period": WILD_PERIOD,
     "rack_size": RACK_SIZE,
     "bingo_bonus": BINGO_BONUS,
-    "center": [7, 7],
+    "center": list(CENTER),  # classic start star
+    "wild_center": list(WILD_CENTER),
     "premiums": {f"{r},{c}": kind for (r, c), kind in PREMIUM.items()},
     "wild_premiums": {f"{r},{c}": kind for (r, c), kind in WILD_PREMIUM.items()},
     "values": {lang: dict(values) for lang, values in TILE_VALUES.items()},
@@ -143,9 +145,9 @@ _words_lock = threading.Lock()
 
 
 def dictionary_path(lang):
-    """Word-list file for a language: words.txt for English, data/<lang>.txt for the rest."""
-    if lang == DEFAULT_LANGUAGE:
-        return os.environ.get("WORDS_FILE") or os.path.join(ROOT_DIR, "words.txt")
+    """Word-list file for a language: data/<lang>.txt (WORDS_FILE overrides English)."""
+    if lang == DEFAULT_LANGUAGE and os.environ.get("WORDS_FILE"):
+        return os.environ["WORDS_FILE"]
     return os.path.join(ROOT_DIR, "data", f"{lang}.txt")
 
 

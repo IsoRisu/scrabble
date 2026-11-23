@@ -29,16 +29,37 @@ for _kind, _squares in (
     for _square in _squares:
         PREMIUM[_square] = _kind
 
-# The Wild (Letter League) layout from wild_rules.txt: there are no triple word
-# squares.  The four edge-centre TW squares become triple letters and the corners are
-# plain squares; everything else is the classic pattern.
-WILD_PREMIUM = {}
-for _square, _kind in PREMIUM.items():
-    if _kind == "TW":
-        if _square in ((0, 0), (0, 14), (14, 0), (14, 14)):
-            continue
-        _kind = "TL"
-    WILD_PREMIUM[_square] = _kind
+# The Wild layout is a 25x25 matrix with its start square at (12, 12) (no bonus).
+# Rows are given for 0-6; rows 7-12 mirror rows 5-0 and rows 13-24 mirror rows 11-0.
+# Columns are mirror-symmetric, so column 24 equals column 0 and the pattern repeats
+# every WILD_PERIOD = 24 squares when the board grows past 25x25.
+WILD_SIZE = 25
+WILD_CENTER = (12, 12)
+WILD_PERIOD = 24
+_WILD_HALF = [
+    {"DW": [2, 6, 10, 14, 18, 22]},
+    {"TL": [1, 11, 13, 23], "DL": [6, 18]},
+    {"DW": [3, 9, 15, 21]},
+    {"DL": [2, 5, 7, 10, 14, 17, 19, 22]},
+    {"DL": [0, 12, 24], "DW": [4, 8, 16, 20]},
+    {"DL": [3, 9, 15, 21], "TL": [5, 7, 17, 19]},
+    {"DW": [0, 12, 24], "DL": [1, 11, 13, 23], "TW": [6, 18]},
+]
+
+
+def _wild_row(r):
+    r = r if r <= 12 else 24 - r
+    return _WILD_HALF[r if r <= 6 else 12 - r]
+
+
+# (row, col) -> kind for the 24x24 repeating tile (row/col 24 wrap onto 0).
+WILD_PREMIUM = {
+    (r, c): kind
+    for r in range(WILD_PERIOD)
+    for kind, cols in _wild_row(r).items()
+    for c in cols
+    if c < WILD_PERIOD
+}
 
 
 # The premium pattern repeats every PERIOD squares in both directions (the classic
@@ -50,10 +71,11 @@ PERIOD = 14
 def premium_at(row, col, mode="classic"):
     """"TW" | "DW" | "TL" | "DL" for any square on the (unbounded) board, or None.
 
-    `mode` picks the layout: "classic" (standard Scrabble) or "wild" (no triple word squares).
+    `mode` picks the layout: "classic" (standard 15x15) or "wild" (25x25 matrix).
     """
-    table = WILD_PREMIUM if mode == "wild" else PREMIUM
-    return table.get((row % PERIOD, col % PERIOD))
+    if mode == "wild":
+        return WILD_PREMIUM.get((row % WILD_PERIOD, col % WILD_PERIOD))
+    return PREMIUM.get((row % PERIOD, col % PERIOD))
 
 
 def letter_boost(row, col, mode="classic"):

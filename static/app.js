@@ -206,10 +206,13 @@
     // Wild has its own layout (no triple word squares); Classic is the standard Scrabble board.
     const currentMode = () => (S && S.mode) || document.body.dataset.mode;
     const premiumAt = (row, col) => {
-      const period = config.premium_period || 14;
-      const layout = currentMode() === 'wild' && config.wild_premiums ? config.wild_premiums : config.premiums;
+      const wild = currentMode() === 'wild' && config.wild_premiums;
+      const period = wild ? (config.wild_period || 24) : (config.premium_period || 14);
+      const layout = wild ? config.wild_premiums : config.premiums;
       return layout[`${mod(row, period)},${mod(col, period)}`];
     };
+    // Start square for the current mode (Wild matrix centre or classic star).
+    const centerOf = () => (currentMode() === 'wild' && config.wild_center) || config.center;
     const letterMult = (row, col) => ({ DL: 2, TL: 3 }[premiumAt(row, col)] || 1);
     let deadlineAt = null;   // local time (ms) at which the current turn's clock runs out
     let pausedLeft = null;   // ms left on a paused (Wild) timer, else null
@@ -409,7 +412,7 @@
         cells = new Map();
         els.board.style.setProperty('--cols', String(b.right - b.left + 1));
         els.board.style.setProperty('--rows', String(b.bottom - b.top + 1));
-        const [centerRow, centerCol] = config.center;
+        const [centerRow, centerCol] = centerOf();
         const fragment = document.createDocumentFragment();
         for (let r = b.top; r <= b.bottom; r += 1) {
           for (let c = b.left; c <= b.right; c += 1) {
@@ -470,7 +473,7 @@
       if (boundsChanged(builtBounds, b) || builtMode !== modeSig) {
         const first = !builtBounds;
         buildBoard();
-        if (first && els.boardScroll.classList.contains('zoomed')) centerBoardOn(cells.get(`${config.center[0]},${config.center[1]}`));
+        if (first && els.boardScroll.classList.contains('zoomed')) centerBoardOn(cells.get(`${centerOf()[0]},${centerOf()[1]}`));
       }
 
       // A picked-up board tile only stays selected while it is still mine to move.
@@ -590,7 +593,7 @@
         modal.classList.add('modal-info');
         modal.append(
           h('h2', { text: 'Game Info' }),
-          h('p', { text: '2 to 16 players take turns placing letters on a shared board to make words, crossword-style. In Wild the board starts at 27 by 19 squares and keeps growing as words reach its edges; Classic uses the standard fixed 15 by 15 board. High-value letters and special squares earn more points.' }),
+          h('p', { text: '2 to 16 players take turns placing letters on a shared board to make words, crossword-style. In Wild the board starts at 25 by 25 squares and keeps growing as words reach its edges; Classic uses the standard fixed 15 by 15 board. High-value letters and special squares earn more points.' }),
           h('h3', { text: 'Setup' }),
           h('p', { text: 'Open Edit Game Settings to choose the length, scoring and timer for your game (before the first turn).' }),
           h('ul', {},
@@ -1796,7 +1799,7 @@
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       ctx.fillStyle = '#f3d3b4';
       ctx.fillRect(ox, oy, cols * px, rows * px);
-      const [cr, cc] = config.center;
+      const [cr, cc] = centerOf();
       ctx.fillStyle = '#e1a14a';
       ctx.fillRect(ox + (cc - b.left) * px, oy + (cr - b.top) * px, Math.max(px, 2), Math.max(px, 2));
       ctx.fillStyle = '#6d3bc4';
@@ -1988,7 +1991,7 @@
     els.shareUrl.addEventListener('focus', () => els.shareUrl.select());
 
     // ---------- boot ----------
-    // The 27x19 board is small on a phone, so start zoomed there on mobile viewports (<= 700px) unless saved otherwise.
+    // The 25x25 board is small on a phone, so start zoomed there on mobile viewports (<= 700px) unless saved otherwise.
     const zoomPref = store.get(ZOOM_KEY);
     if (zoomPref === '1' || (zoomPref === null && window.innerWidth <= 700)) {
       setZoom(true, { center: false, persist: zoomPref !== null });

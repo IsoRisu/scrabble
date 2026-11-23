@@ -14,6 +14,13 @@ from game.room import (  # noqa: E402
 from game.scoring import PREMIUM, WILD_PREMIUM, premium_at, score_move  # noqa: E402
 from game.tiles import BLANK, LANGUAGES, TILE_DISTRIBUTIONS, TILE_VALUES, new_bag  # noqa: E402
 
+# data/en.txt is large and may be absent (CI, fresh clones): pretend it exists so rooms
+# can be created; game tests install their own words with set_words().
+if not getattr(room_module, "_en_stubbed", False):
+    _orig_available = room_module.available_languages
+    room_module.available_languages = lambda: sorted(set(_orig_available()) | {"en"})
+    room_module._en_stubbed = True
+
 TILE_DISTRIBUTION = TILE_DISTRIBUTIONS["en"]
 TILE_VALUES_EN = TILE_VALUES["en"]
 
@@ -94,105 +101,108 @@ class PremiumTests(unittest.TestCase):
 class BoardTests(unittest.TestCase):
     def test_first_move_must_cover_centre(self):
         with self.assertRaisesRegex(GameError, "centre"):
-            Board().analyze(word_placements("CAT", 0, 0))
+            Board(classic=True).analyze(word_placements("CAT", 0, 0))
 
     def test_first_move_needs_two_tiles(self):
         with self.assertRaisesRegex(GameError, "two letters"):
-            Board().analyze([P(7, 7, "A")])
+            Board(classic=True).analyze([P(7, 7, "A")])
 
     def test_first_move_ok_both_directions(self):
         for horizontal in (True, False):
-            board = Board()
+            board = Board(classic=True)
             row, col = (7, 5) if horizontal else (5, 7)
             words = board.analyze(word_placements("CAT", row, col, horizontal))
             self.assertEqual([w.text for w in words], ["CAT"])
 
     def test_tiles_must_be_in_one_line(self):
         with self.assertRaisesRegex(GameError, "single row or column"):
-            Board().analyze([P(7, 7, "A"), P(8, 8, "B")])
+            Board(classic=True).analyze([P(7, 7, "A"), P(8, 8, "B")])
 
     def test_gaps_are_rejected(self):
         with self.assertRaisesRegex(GameError, "no gaps"):
-            Board().analyze([P(7, 5, "A"), P(7, 7, "B")])
+            Board(classic=True).analyze([P(7, 5, "A"), P(7, 7, "B")])
 
     def test_gap_filled_by_existing_tile_is_ok(self):
-        board = Board()
+        board = Board(classic=True)
         board.place_all(word_placements("CAT", 7, 6))  # C(7,6) A(7,7) T(7,8)
         words = board.analyze([P(6, 7, "X"), P(8, 7, "Y")])  # vertical through the A
         self.assertEqual([w.text for w in words], ["XAY"])
 
     def test_must_connect(self):
-        board = Board()
+        board = Board(classic=True)
         board.place_all(word_placements("CAT", 7, 6))
         with self.assertRaisesRegex(GameError, "connect"):
             board.analyze(word_placements("DOG", 0, 0))
 
     def test_cannot_overlap(self):
-        board = Board()
+        board = Board(classic=True)
         board.place_all(word_placements("CAT", 7, 6))
         with self.assertRaisesRegex(GameError, "taken"):
             board.analyze([P(7, 7, "Z"), P(6, 7, "Q")])
 
     def test_off_board(self):
         with self.assertRaises(GameError):
-            Board().analyze([P(7, 20, "A"), P(7, 21, "B")])
+            Board(classic=True).analyze([P(7, 14, "A"), P(7, 15, "B")])
+        with self.assertRaises(GameError):
+            Board().analyze([P(12, 24, "A"), P(12, 25, "B")])
 
-    def test_board_starts_27_by_19_around_the_star(self):
+    def test_board_starts_25_by_25_around_the_centre(self):
         board = Board()
         b = board.bounds()
-        self.assertEqual((b["right"] - b["left"] + 1, b["bottom"] - b["top"] + 1), (27, 19))
-        self.assertTrue(board.in_bounds(7, 7))
+        self.assertEqual((b["right"] - b["left"] + 1, b["bottom"] - b["top"] + 1), (25, 25))
+        self.assertEqual(board.center, (12, 12))
         self.assertEqual(b, initial_bounds())
-        self.assertTrue(board.in_bounds(7, 20) and not board.in_bounds(7, 21))
-        self.assertTrue(board.in_bounds(-2, 7) and not board.in_bounds(-3, 7))
+        self.assertTrue(board.in_bounds(12, 24) and not board.in_bounds(12, 25))
+        self.assertTrue(board.in_bounds(0, 12) and not board.in_bounds(-1, 12))
+        self.assertEqual(Board(classic=True).center, (7, 7))
 
     def test_board_grows_towards_the_tiles_and_never_shrinks(self):
         board = Board()
-        board.place_all([P(7, 15, "A")])
+        board.place_all([P(12, 20, "A")])
         self.assertTrue(board.expand_to_margin(7))
-        self.assertEqual(board.bounds()["right"], 22)
-        self.assertEqual(board.bounds()["left"], -6)  # the other sides did not move
-        board.place_all([P(-4, 7, "B")])
+        self.assertEqual(board.bounds()["right"], 27)
+        self.assertEqual(board.bounds()["left"], 0)  # the other sides did not move
+        board.place_all([P(3, 12, "B")])
         self.assertTrue(board.expand_to_margin(7))
-        self.assertEqual(board.bounds()["top"], -11)
-        board.remove_all([P(7, 15, "A")])
+        self.assertEqual(board.bounds()["top"], -4)
+        board.remove_all([P(12, 20, "A")])
         self.assertFalse(board.expand_to_margin(7))
-        self.assertEqual(board.bounds()["right"], 22)
+        self.assertEqual(board.bounds()["right"], 27)
 
     def test_no_growth_while_tiles_stay_clear_of_the_edge(self):
         board = Board()
-        board.place_all(word_placements("HELLO", 7, 3))
+        board.place_all(word_placements("HELLO", 12, 10))  # cols 10-14, 10 squares from the edge
         self.assertFalse(board.expand_to_margin(7))
         self.assertEqual(board.bounds(), initial_bounds())
 
     def test_expanded_squares_are_playable_and_have_premiums(self):
         board = Board()
-        board.place_all(word_placements("CAT", 7, 18))
+        board.place_all(word_placements("CAT", 12, 19))
         board.expand_to_margin(7)
-        words = board.analyze([P(7, 21, "S"), P(7, 22, "Y")])
+        words = board.analyze([P(12, 22, "S"), P(12, 23, "Y")])
         self.assertEqual([w.text for w in words], ["CATSY"])
 
     def test_multiply_boosts(self):
-        board = Board()
+        board = Board(classic=True)
         board.place_all([P(7, 7, "A")], boosts={(7, 7): 2})
         board.multiply_boosts({(7, 7): 3, (0, 0): 5})
         self.assertEqual(board.get(7, 7).boost, 6)
 
     def test_extending_an_existing_word(self):
-        board = Board()
+        board = Board(classic=True)
         board.place_all(word_placements("CAT", 7, 6))
         words = board.analyze([P(7, 9, "S")])
         self.assertEqual([w.text for w in words], ["CATS"])
 
     def test_prefix_and_suffix_run_together(self):
-        board = Board()
+        board = Board(classic=True)
         board.place_all(word_placements("AT", 7, 7))
         words = board.analyze([P(7, 6, "C"), P(7, 9, "S")])
         # C _ A T S has a gap at (7,8)? no: AT occupies (7,7),(7,8); new tiles are at 6 and 9
         self.assertEqual([w.text for w in words], ["CATS"])
 
     def test_cross_words_are_found(self):
-        board = Board()
+        board = Board(classic=True)
         board.place_all(word_placements("CAT", 7, 6))
         # horizontal play on row 8 directly beneath CAT: forms CA? vertical pairs
         words = board.analyze([P(8, 6, "O"), P(8, 7, "N")])
@@ -200,20 +210,20 @@ class BoardTests(unittest.TestCase):
         self.assertEqual(words[0].text, "ON")  # main word first
 
     def test_single_tile_forms_both_directions(self):
-        board = Board()
+        board = Board(classic=True)
         board.place_all(word_placements("CAT", 7, 6))
         board.place_all(word_placements("ON", 8, 6)[1:])  # N under A at (8,7)... keep it simple
         words = board.analyze([P(8, 8, "O")])  # right of N, under T
         self.assertEqual(sorted(w.text for w in words), ["NO", "TO"])
 
     def test_single_tile_that_forms_no_word(self):
-        board = Board()
+        board = Board(classic=True)
         board.place_all(word_placements("CAT", 7, 6))
         with self.assertRaisesRegex(GameError, "connect"):
             board.analyze([P(3, 3, "A")])
 
     def test_remove_all(self):
-        board = Board()
+        board = Board(classic=True)
         tiles = word_placements("CAT", 7, 6)
         board.place_all(tiles)
         board.remove_all(tiles)
@@ -228,19 +238,19 @@ class ScoringTests(unittest.TestCase):
 
     def test_hello_on_the_star(self):
         # H on a double letter (7,3), O on the centre double word: (8 + 1 + 2 + 2 + 1) * 2
-        result = self.score(Board(), word_placements("HELLO", 7, 3))
+        result = self.score(Board(classic=True), word_placements("HELLO", 7, 3))
         self.assertEqual(result.total, 28)
         self.assertFalse(result.bingo)
 
     def test_premium_squares_only_count_once(self):
-        board = Board()
+        board = Board(classic=True)
         board.place_all(word_placements("HELLO", 7, 3))
         # Extend to HELLOS at (7,8): no premium there, and the old DW must not re-apply.
         result = self.score(board, [P(7, 8, "S")])
         self.assertEqual(result.total, 4 + 1 + 2 + 2 + 1 + 1)
 
     def test_cross_word_scoring(self):
-        board = Board()
+        board = Board(classic=True)
         board.place_all(word_placements("CAT", 7, 6))
         # Vertical word through the C at (7,6): 'ACE'? use A(6,6) C E(8,6): premium at (6,6) is DL
         placements = [P(6, 6, "A"), P(8, 6, "E")]
@@ -251,14 +261,14 @@ class ScoringTests(unittest.TestCase):
         self.assertEqual(result.total, 7)
 
     def test_blank_is_worth_zero_but_keeps_word_multiplier(self):
-        board = Board()
+        board = Board(classic=True)
         placements = [P(7, 6, "C"), P(7, 7, "A", blank=True), P(7, 8, "T")]
         result = self.score(board, placements)
         # C(3) + blank(0) on DW + T(1) = 4, doubled
         self.assertEqual(result.total, 8)
 
     def test_triple_word(self):
-        board = Board()
+        board = Board(classic=True)
         board.place_all(word_placements("AAAAAA", 7, 1))  # A at (7,1)..(7,6) -> to the left of centre
         # Extend through (7,0) TW: 7 letters... place a single tile at (7,0) -> word of 7 letters
         words = board.analyze([P(7, 0, "B")])
@@ -266,7 +276,7 @@ class ScoringTests(unittest.TestCase):
 
     def test_bingo_bonus(self):
         placements = word_placements("RETINAS", 7, 1)  # row 7, cols 1..7 (covers the star)
-        result = self.score(Board(), placements)
+        result = self.score(Board(classic=True), placements)
         self.assertTrue(result.bingo)
         letters = sum(TILE_VALUES_EN[ch] for ch in "RETINAS")
         # premium squares on row 7: (7,3) DL -> T doubled, (7,7) DW
@@ -276,23 +286,23 @@ class ScoringTests(unittest.TestCase):
 
     def test_wild_bingo_doubles_only_the_main_word(self):
         board = Board()
-        board.place_all([P(6, 10, "A"), P(8, 10, "E")])  # a tile above and below column 10
-        placements = word_placements("RETINAS", 7, 4)  # row 7, cols 4..10; S crosses A_E at col 10
+        board.place_all([P(11, 16, "A"), P(13, 16, "E")])  # a tile above and below column 16
+        placements = word_placements("RETINAS", 12, 10)  # row 12, cols 10..16; S crosses A_E at col 16
         words = board.analyze(placements)
         self.assertEqual(words[0].text, "RETINAS")
         self.assertEqual(words[1].text, "ASE")
         base = score_move(words, 7, "en", "classic")
         wild = score_move(words, 7, "en", "wild")
         self.assertTrue(wild.bingo)
-        self.assertEqual(wild.word_scores, base.word_scores)
-        self.assertEqual(wild.bonus, base.word_scores[0])  # main word counted twice
-        self.assertEqual(wild.total, sum(base.word_scores) + base.word_scores[0])
+        self.assertEqual(wild.bonus, wild.word_scores[0])  # main word counted twice
+        self.assertEqual(wild.total, sum(wild.word_scores) + wild.word_scores[0])
+        self.assertEqual(base.bonus, 50)
         self.assertEqual(base.total, sum(base.word_scores) + 50)
 
     def test_bingo_mode_defaults_to_classic(self):
-        words = Board().analyze(word_placements("RETINAS", 7, 1))
+        words = Board(classic=True).analyze(word_placements("RETINAS", 7, 1))
         self.assertEqual(score_move(words, 7).bonus, 50)
-        self.assertEqual(score_move(words, 7, "en", "wild").bonus, score_move(words, 7).word_scores[0])
+        self.assertEqual(score_move(words, 7, "en", "wild").bonus, score_move(words, 7, "en", "wild").word_scores[0])
 
 
 class WildScoringTests(unittest.TestCase):
@@ -307,26 +317,26 @@ class WildScoringTests(unittest.TestCase):
         self.assertEqual(letter_boost(1, 2), 1)   # plain square
 
     def test_old_tile_counts_its_boost(self):
-        board = Board()
+        board = Board(classic=True)
         board.place_all(word_placements("CAT", 7, 6), boosts={(7, 6): 3})  # C is worth 3, boosted x3
         words = board.analyze([P(7, 9, "S")])
         self.assertEqual(score_move(words, 1).total, 9 + 1 + 1 + 1)
 
     def test_old_boost_is_not_applied_twice_to_premium(self):
-        board = Board()
+        board = Board(classic=True)
         board.place_all(word_placements("HELLO", 7, 3), boosts={(7, 3): 2})  # H boosted x2 = 8
         words = board.analyze([P(7, 8, "S")])
         # H 8 + E + L + L + O + S = 15, no premium re-applied to old tiles
         self.assertEqual(score_move(words, 1).total, 8 + 1 + 2 + 2 + 1 + 1)
 
     def test_blank_stays_worth_zero_when_boosted(self):
-        board = Board()
+        board = Board(classic=True)
         board.place_all([P(7, 6, "C", True), P(7, 7, "A"), P(7, 8, "T")], boosts={(7, 6): 3})
         words = board.analyze([P(7, 9, "S")])
         self.assertEqual(score_move(words, 1).total, 0 + 1 + 1 + 1)
 
     def test_board_snapshot_includes_boost(self):
-        board = Board()
+        board = Board(classic=True)
         board.place_all([P(7, 6, "C")], boosts={(7, 6): 2})
         self.assertEqual(board.to_dict()["7,6"], {"l": "C", "b": False, "m": 2})
 
@@ -334,7 +344,7 @@ class WildScoringTests(unittest.TestCase):
 WORDS = ["CAT", "CATS", "AT", "ON", "NO", "TO", "HELLO", "ACE", "DOG", "GO", "OX", "XI", "AX", "ZA", "QI"]
 
 
-def make_room(mode="wild", seed=1):
+def make_room(mode="classic", seed=1):
     set_words(WORDS)
     room = Room("TESTROOM", mode=mode, rng=random.Random(seed))
     a = room.add_player("Alice")
@@ -415,8 +425,8 @@ class RoomFlowTests(unittest.TestCase):
         mover = room.players[room.current]
         set_words(["RETINAS"])
         give(mover, list("RETINAS"))
-        result = move(room, mover, "RETINAS", 7, 1)
-        base = (7 + 1) * 2  # T on the DL at (7,3), S on the centre DW
+        result = move(room, mover, "RETINAS", 12, 6)
+        base = 7 * 4  # R on the DW at (12,6), N on the DW at (12,10)
         self.assertEqual((result["bingo"], result["bingo_bonus"]), (True, base))
         self.assertEqual(result["score"], base * 2)
 
@@ -429,12 +439,12 @@ class RoomFlowTests(unittest.TestCase):
         self.assertEqual((result["bingo_bonus"], result["score"]), (50, 16 + 50))
 
     def test_invalid_word_rejected_in_strict_mode_and_pending_kept(self):
-        room, a, b = make_room()
+        room, a, b = make_room("wild")
         mover = room.players[room.current]
         give(mover, list("ZZQXJKV"))
         room.place_tiles(mover, [
-            {"rack_index": 0, "row": 7, "col": 7},
-            {"rack_index": 1, "row": 7, "col": 8},
+            {"rack_index": 0, "row": 12, "col": 12},
+            {"rack_index": 1, "row": 12, "col": 13},
         ])
         self.assertFalse(mover.preview["ok"])
         with self.assertRaisesRegex(GameError, "dictionary"):
@@ -558,15 +568,15 @@ class RoomFlowTests(unittest.TestCase):
             room.swap(mover, [0])
 
     def test_going_out_ends_the_game_with_rack_adjustments(self):
-        room, a, b = make_room()
+        room, a, b = make_room("wild")
         mover = room.players[room.current]
         opp = room.players[1 - room.current]
         room.bag = []
         give(mover, list("CAT"))
         give(opp, list("QZ"))  # 20 points of tiles left
-        move(room, mover, "CAT", 7, 6)
+        move(room, mover, "CAT", 12, 10)
         self.assertEqual(room.status, "finished")
-        base = (3 + 1 + 1) * 2  # CAT across the star: C(3)+A(1)+T(1) with DW at (7,7)
+        base = (3 + 1 + 1) * 2  # CAT with C on the DW at (12,10)
         self.assertEqual(mover.score, base + 20)
         self.assertEqual(opp.score, -20)
         self.assertEqual(room.winner, mover.seat)
@@ -585,7 +595,7 @@ class RoomFlowTests(unittest.TestCase):
 class ChallengeTests(unittest.TestCase):
     def test_wild_mode_rejects_challenges(self):
         room, a, b = make_room("wild")
-        with self.assertRaisesRegex(GameError, "challenge mode"):
+        with self.assertRaisesRegex(GameError, "Challenges are only available"):
             room.challenge(room.players[room.current])
 
     def test_challenge_mode_accepts_bogus_word_then_challenge_reverts_it(self):
@@ -714,7 +724,10 @@ class ModeTests(unittest.TestCase):
         room, a, b = make_room(mode)
         mover = room.players[room.current]
         give(mover, list("HELLOXY"))
-        move(room, mover, "HELLO", 7, 3)  # H lands on the DL at (7,3)
+        if mode == "wild":
+            move(room, mover, "HELLO", 8, 12, horizontal=False)  # H lands on the DL at (8,12)
+        else:
+            move(room, mover, "HELLO", 7, 3)  # H lands on the DL at (7,3)
         return room, mover
 
     def test_default_mode_is_wild_with_automatic_checking(self):
@@ -732,11 +745,10 @@ class ModeTests(unittest.TestCase):
 
     def test_wild_keeps_bonuses_on_board(self):
         room, _ = self.play_first("wild")
-        # HELLO: H on a DL (x2) and the word covers the DW star (x2 for every letter).
-        self.assertEqual(room.board.get(7, 3).boost, 4)
-        self.assertEqual(room.board.get(7, 4).boost, 2)
-        self.assertEqual(room.board.get(7, 7).boost, 2)
-        self.assertEqual(room.view_for(room.players[0])["board"]["7,3"]["m"], 4)
+        # HELLO down column 12 from (8,12): H sits on a DL and keeps x2; no word bonus is covered.
+        self.assertEqual(room.board.get(8, 12).boost, 2)
+        self.assertEqual([room.board.get(r, 12).boost for r in (9, 10, 11, 12)], [1, 1, 1, 1])
+        self.assertEqual(room.view_for(room.players[0])["board"]["8,12"]["m"], 2)
 
     def test_classic_never_keeps_boost(self):
         room, _ = self.play_first("classic")
@@ -748,10 +760,10 @@ class ModeTests(unittest.TestCase):
         set_words(WORDS + ["HELLOS"])
         give(other, list("SQQQQQQ"))
         before = other.score
-        move(room, other, "S", 7, 8)  # HELLOS: H, E, L, L, O keep their x4 / x2 values
-        self.assertEqual(other.score - before, 16 + 2 + 4 + 4 + 2 + 1)
-        self.assertEqual(room.board.get(7, 8).boost, 1)  # the added S is not multiplied
-        self.assertEqual(room.board.get(7, 3).boost, 4)  # and the old letters are not multiplied again
+        move(room, other, "S", 13, 12)  # HELLOS: H keeps its x2, the rest are face value
+        self.assertEqual(other.score - before, 4 * 2 + 1 + 2 + 2 + 1 + 1)
+        self.assertEqual(room.board.get(13, 12).boost, 1)  # the added S is not multiplied
+        self.assertEqual(room.board.get(8, 12).boost, 2)  # and the old letters are not multiplied again
 
     def test_classic_extension_ignores_old_premium(self):
         room, mover = self.play_first("classic")
@@ -766,8 +778,8 @@ class ModeTests(unittest.TestCase):
         room, _, _ = make_room("wild")
         mover = room.players[room.current]
         give(mover, list("CATQQQQ"))
-        move(room, mover, "CAT", 7, 6)  # covers the centre DW
-        self.assertEqual([room.board.get(7, c).boost for c in (6, 7, 8)], [2, 2, 2])
+        move(room, mover, "CAT", 12, 10)  # C on the DW at (12,10); T on the centre
+        self.assertEqual([room.board.get(12, c).boost for c in (10, 11, 12)], [2, 2, 2])
 
     def test_classic_word_bonus_is_not_kept(self):
         room, _, _ = make_room("classic")
@@ -780,7 +792,7 @@ class ModeTests(unittest.TestCase):
         room, a, b = make_room("wild")
         mover = room.players[room.current]
         give(mover, list("ZZQXJKV"))
-        room.place_tiles(mover, [{"rack_index": 0, "row": 7, "col": 7}, {"rack_index": 1, "row": 7, "col": 8}])
+        room.place_tiles(mover, [{"rack_index": 0, "row": 12, "col": 12}, {"rack_index": 1, "row": 12, "col": 13}])
         self.assertFalse(mover.preview["ok"])
         self.assertIs(mover.preview["words"][0]["valid"], False)
         with self.assertRaisesRegex(GameError, "dictionary"):
@@ -846,7 +858,7 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual((view["mode"], view["length"], view["rules"]), ("classic", "medium", "challenge"))
         self.assertEqual(CONFIG["modes"], ["wild", "classic"])
         self.assertEqual(CONFIG["lengths"], {"short": 50, "medium": 100, "full": 150})
-        self.assertEqual((CONFIG["cols"], CONFIG["rows"]), (27, 19))
+        self.assertEqual((CONFIG["cols"], CONFIG["rows"]), (25, 25))
         self.assertEqual(CONFIG["classic_bounds"], view["bounds"])  # classic room: fixed 15x15
 
 
@@ -931,8 +943,7 @@ class MultiplayerTests(unittest.TestCase):
             Room("X", max_players=17)
 
     def test_full_room_rejects_a_fourth_player(self):
-        room, _ = self.lobby(3)
-        room.max_players = 3
+        room, _ = self.lobby(2, mode="classic")  # classic stays strictly two-player
         with self.assertRaisesRegex(GameError, "full"):
             room.add_player("Zed")
 
@@ -1050,7 +1061,7 @@ class TimerTests(unittest.TestCase):
         mover = room.players[room.current]
         give(mover, list("CATQQQQ"))
         clock.t += 40
-        move(room, mover, "CAT", 7, 6)
+        move(room, mover, "CAT", 12, 10)
         room.touch()
         self.assertEqual(room.view_for(mover)["turn_ms_left"], 60000)
         self.assertFalse(room.expire_turn())
@@ -1181,7 +1192,12 @@ class MiscTests(unittest.TestCase):
             Room("X", length="endless")
 
     def test_bundled_word_list(self):
+        path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "en.txt")
+        if not os.path.exists(path):
+            self.skipTest("data/en.txt not present")
         words = load_words()
+        if len(words) < 1000:
+            self.skipTest("data/en.txt is only a stub")
         self.assertGreater(len(words), 20000)
         for w in ("QUIZ", "ZA", "QI", "XYLOPHONE", "SCRABBLE", "CATS"):
             self.assertIn(w, words)
@@ -1261,7 +1277,7 @@ class LanguageTests(unittest.TestCase):
             room.place_tiles(mover, [{"rack_index": 0, "row": 7, "col": 7, "letter": "W"}])  # not a Finnish tile
 
     def test_scoring_uses_the_room_language(self):
-        words = Board().analyze([Placement(7, 7, "Ö", False), Placement(7, 8, "Ö", False)])
+        words = Board(classic=True).analyze([Placement(7, 7, "Ö", False), Placement(7, 8, "Ö", False)])
         self.assertEqual(score_move(words, 2, "fi").total, (7 + 7) * 2)
         self.assertEqual(score_move(words, 2, "en").total, 0)
 
@@ -1301,7 +1317,7 @@ class FollowUpTests(unittest.TestCase):
         self.assertEqual(length_for_players(2), "medium")
 
     def test_board_shrink_to_margin_restores_the_start_area(self):
-        board = Board()
+        board = Board(classic=True)
         start = board.bounds()
         board.place_all([P(7, 20, "A"), P(7, 21, "T")])
         self.assertTrue(board.expand_to_margin(7))
@@ -1312,7 +1328,7 @@ class FollowUpTests(unittest.TestCase):
         self.assertFalse(board.shrink_to_margin(7))
 
     def test_board_keeps_growth_needed_by_remaining_tiles(self):
-        board = Board()
+        board = Board(classic=True)
         board.place_all([P(7, 7, "A"), P(7, 25, "T")])
         board.expand_to_margin(7)
         wide = board.bounds()
@@ -1386,83 +1402,96 @@ class FollowUpTests(unittest.TestCase):
         self.assertIsNone(room.skippable_seat())
 
 
+WILD_MATRIX = [
+    "..w...w...w...w...w...w..",
+    ".L....l....L.L....l....L.",
+    "...w.....w.....w.....w...",
+    "..l..l.l..l...l..l.l..l..",
+    "l...w...w...l...w...w...l",
+    "...l.L.L.l.....l.L.L.l...",
+    "wl....W....lwl....W....lw",
+    "...l.L.L.l.....l.L.L.l...",
+    "l...w...w...l...w...w...l",
+    "..l..l.l..l...l..l.l..l..",
+    "...w.....w.....w.....w...",
+    ".L....l....L.L....l....L.",
+    "..w...w...w...w...w...w..",
+]
+WILD_MATRIX = WILD_MATRIX + WILD_MATRIX[11::-1]  # rows 13-24 mirror rows 11-0
+WILD_CODES = {".": None, "l": "DL", "L": "TL", "w": "DW", "W": "TW"}
+
+
 class RulesFileTests(unittest.TestCase):
-    """The layouts and rules written in wild_rules.txt / classic_rules.txt."""
+    """The Wild 25x25 matrix and the classic layout (embedded, no files read)."""
 
-    @staticmethod
-    def board_from(filename, name):
-        path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), filename)
-        if not os.path.exists(path):
-            return None
-        with open(path, encoding="utf-8") as handle:
-            text = handle.read()
-        namespace = {}
-        exec(text[text.index(name + " = ["):], namespace)  # the board literal is valid Python
-        return namespace[name]
+    def test_wild_layout_matches_the_matrix(self):
+        self.assertEqual(len(WILD_MATRIX), 25)
+        for r, row in enumerate(WILD_MATRIX):
+            self.assertEqual(len(row), 25, r)
+            for c, ch in enumerate(row):
+                self.assertEqual(premium_at(r, c, "wild"), WILD_CODES[ch], (r, c))
 
-    NAMES = {"": None, "DL": "DL", "TL": "TL", "DW": "DW", "TW": "TW", "2L": "DL", "3L": "TL", "2W": "DW", "3W": "TW"}
+    def test_wild_layout_is_symmetric_and_repeats_every_24(self):
+        for r in range(25):
+            for c in range(25):
+                kind = premium_at(r, c, "wild")
+                self.assertEqual(premium_at(24 - r, c, "wild"), kind)
+                self.assertEqual(premium_at(r, 24 - c, "wild"), kind)
+                self.assertEqual(premium_at(r + 24, c - 24, "wild"), kind)
 
-    def check_layout(self, table, board):
-        for r in range(15):
-            for c in range(15):
-                cell = board[r][c]
-                expected = "DW" if cell == "\u2605" else self.NAMES[cell]
-                self.assertEqual(table.get((r, c)), expected, (r, c))
-
-    def test_wild_layout_matches_the_rules_file(self):
-        board = self.board_from("wild_rules.txt", "WILD_SCRABBLE_BOARD")
-        if board is None:
-            self.skipTest("wild_rules.txt not present")
-        self.check_layout(WILD_PREMIUM, board)
-
-    def test_classic_layout_matches_the_rules_file(self):
-        board = self.board_from("classic_rules.txt", "SCRABBLE_BOARD")
-        if board is None:
-            self.skipTest("classic_rules.txt not present")
-        self.check_layout(PREMIUM, board)
-
-    def test_wild_has_no_triple_word_squares_and_blank_corners(self):
-        self.assertNotIn("TW", WILD_PREMIUM.values())
+    def test_wild_spot_checks(self):
+        for square in ((6, 6), (6, 18), (18, 6), (18, 18)):
+            self.assertEqual(premium_at(*square, "wild"), "TW")
+        self.assertEqual(sum(1 for k in WILD_PREMIUM.values() if k == "TW"), 4)
+        self.assertIsNone(premium_at(12, 12, "wild"))  # the centre is a plain start square
+        self.assertEqual(premium_at(0, 2, "wild"), "DW")
+        self.assertEqual(premium_at(1, 1, "wild"), "TL")
+        self.assertEqual(premium_at(4, 0, "wild"), "DL")
         self.assertIsNone(premium_at(0, 0, "wild"))
-        self.assertEqual(premium_at(0, 7, "wild"), "TL")
-        self.assertEqual(premium_at(7, 0, "wild"), "TL")
+        self.assertEqual(premium_at(-12, 12 + 24, "wild"), None)
+
+    def test_classic_layout_counts_and_symmetry(self):
         self.assertEqual(premium_at(0, 0, "classic"), "TW")
         self.assertEqual(premium_at(0, 0), "TW")  # classic is the default layout
-        self.assertEqual(premium_at(-14, 0, "wild"), None)  # pattern repeats off the 15x15 grid
-        self.assertEqual(premium_at(-7, 7, "wild"), "DW")
+        self.assertEqual(premium_at(7, 7), "DW")
+        for (r, c), kind in PREMIUM.items():
+            self.assertEqual(PREMIUM.get((14 - r, c)), kind)
+            self.assertEqual(PREMIUM.get((c, r)), kind)
 
     def test_client_config_has_both_layouts(self):
         self.assertEqual(len(CONFIG["wild_premiums"]), len(WILD_PREMIUM))
-        self.assertNotIn("TW", CONFIG["wild_premiums"].values())
+        self.assertEqual(CONFIG["wild_period"], 24)
+        self.assertEqual(CONFIG["wild_center"], [12, 12])
+        self.assertEqual(CONFIG["center"], [7, 7])
 
     def test_wild_centre_star_still_doubles_the_first_word(self):
         room, a, b = make_room("wild")
         mover = room.players[room.current]
-        # (7,7) is the centre; the TL on (7,3) triples its letter in Wild too.
+        # (12,12) is the plain centre; C on the DW at (12,10) doubles the word.
         give(mover, list("CATQQQQ"))
-        result = move(room, mover, "CAT", 7, 6)
-        self.assertEqual(result["score"], (3 + 1 + 1) * 2)  # centre DW only
+        result = move(room, mover, "CAT", 12, 10)
+        self.assertEqual(result["score"], (3 + 1 + 1) * 2)
         room2, a2, b2 = make_room("wild")
         mover2 = room2.players[room2.current]
         give(mover2, list("CATQQQQ"))
-        move(room2, mover2, "CAT", 7, 7)  # C on the star, A (7,8), T (7,9): no premiums but the star
+        move(room2, mover2, "CAT", 12, 12)  # C on the centre, A (12,13), T on the DW at (12,14)
         self.assertEqual(mover2.score, (3 + 1 + 1) * 2)
 
-    def test_wild_edge_square_is_a_triple_letter_not_a_triple_word(self):
+    def test_wild_triple_word_square(self):
         from game.board import Word, WordCell
         from game.scoring import score_word
-        cells = tuple(WordCell(0, c, ch, False, True) for c, ch in zip(range(6, 9), "CAT"))
-        # (0,7) holds the A: TL in Wild (3x), TW in Classic (word x3).
-        self.assertEqual(score_word(Word(cells), "en", "wild"), 3 + 1 * 3 + 1)
-        self.assertEqual(score_word(Word(cells), "en", "classic"), (3 + 1 + 1) * 3)
+        cells = tuple(WordCell(6, c, ch, False, True) for c, ch in zip(range(6, 9), "CAT"))
+        # (6,6) holds the C: 3W in Wild (word x3), but only a DL in Classic.
+        self.assertEqual(score_word(Word(cells), "en", "wild"), (3 + 1 + 1) * 3)
+        self.assertEqual(score_word(Word(cells), "en", "classic"), 3 * 2 + 1 + 1 * 2)
 
     def test_zero_point_play_gets_the_easter_egg(self):
         room, a, b = make_room("wild")
         mover = room.players[room.current]
         give(mover, [BLANK, BLANK, "Q", "Q", "Q", "Q", "Q"])
         items = [
-            {"rack_index": 0, "row": 7, "col": 7, "letter": "G"},
-            {"rack_index": 1, "row": 7, "col": 8, "letter": "O"},
+            {"rack_index": 0, "row": 12, "col": 12, "letter": "G"},
+            {"rack_index": 1, "row": 12, "col": 13, "letter": "O"},
         ]
         room.place_tiles(mover, items)
         result = room.submit(mover)
@@ -1473,14 +1502,14 @@ class RulesFileTests(unittest.TestCase):
         room, a, b = make_room("wild")
         mover = room.players[room.current]
         give(mover, list("CATQQQQ"))
-        move(room, mover, "CAT", 7, 6)
+        move(room, mover, "CAT", 12, 10)
         self.assertNotIn("0 points", room.history[-1]["text"])
 
     def test_history_play_entries_carry_their_words(self):
         room, a, b = make_room("wild")
         mover = room.players[room.current]
         give(mover, list("CATQQQQ"))
-        move(room, mover, "CAT", 7, 6)
+        move(room, mover, "CAT", 12, 10)
         self.assertEqual(room.history[-1]["words"], ["CAT"])
         self.assertNotIn("words", room.history[0])  # system lines carry none
 
@@ -1512,7 +1541,14 @@ class TileTrackerTests(unittest.TestCase):
 
     def test_blanks_are_counted_apart_and_finnish_vowels_include_umlauts(self):
         set_words(WORDS)
-        room = Room("FI", language="fi", rng=random.Random(2))
+        set_words(["TERVE"], "fi")
+        exists = room_module.os.path.exists
+        room_module.os.path.exists = lambda p: True if p.endswith("fi.txt") else exists(p)
+        try:
+            room = Room("FI", language="fi", rng=random.Random(2))
+        finally:
+            room_module.os.path.exists = exists
+            room_module._words.pop("fi", None)
         a, b = room.add_player("A"), room.add_player("B")
         room.start()
         room.bag.clear()
@@ -1580,7 +1616,7 @@ class ResignTests(unittest.TestCase):
         room.bag.clear()
         give(players[0], list("CAT"))
         players[1].rack = ["Q"]
-        move(room, players[0], "CAT", 7, 6)
+        move(room, players[0], "CAT", 12, 10)
         self.assertEqual(room.status, "finished")
         self.assertEqual(room.winner, players[0].seat)
 

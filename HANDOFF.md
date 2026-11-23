@@ -1,23 +1,18 @@
-# Handoff from the previous run
+# Handoff (for AI assistants and new contributors)
 
-## What this run did
+Project facts live in `README.md`. This file only holds what an assistant needs to continue the work.
 
-- Phase 1/4 — CSS Accessibility and Layout Foundations: Updated templates/game
-- html and static/style
-- css for Phase 1: established 48x48px minimum touch targets, improved WCAG contrast ratios, and added base layout markup and styles for the collapsible drawer and contextual action bar
-- Stopped before phase 2/4 (EditsFailed): The AI tried to delete a file that doesn't exist: `src/a
-- py` (delete): `src/a
-- py` does not exist in the repository — check the filename for typos
-- Check the filename for typos
-- Nothing was committed
+## State
+- Wild uses the 25x25 matrix in `game/scoring.py` (centre (12,12), period 24 for growth). Classic is the fixed 15x15 board (centre (7,7)).
+- `Board(classic=..., center=None)` picks the start square per mode; `CONFIG` exposes `wild_center` / `wild_period`; the client (`static/app.js`) uses `centerOf()` and the mode-aware `premiumAt()`.
+- English word list: `data/en.txt` (large, not in the zip/repo snapshots). `WORDS_FILE` overrides it. Other languages: `data/<code>.txt`.
+- Tests and CI: `python -m unittest discover -s tests`; CI in `.github/workflows/ci.yml`. Tests stub the English list, so no data files are needed. `tests/test_app.py` skips if Flask-SocketIO is missing.
+- `make_room()` in tests defaults to Classic (coordinates around (7,7)); Wild tests pass `"wild"` and use coordinates around (12,12).
 
-## What the next run should do
+## Not done / ideas
+- Classic game clock and point-challenge rule; long-word (17+ letters) dictionary; see README TODO.
+- Socket.IO and browser client have no automated tests (only syntax checked).
 
-- Contextual Action Bar and Ghosting Logic: Modify static/app.js to implement smart visibility and ghosting/transparency for disabled action buttons (Pass, Swap, Submit) and an overflow menu when it's not the user's turn or actions are invalid, maximizing board space.
-- Unified Scrollable Drawer and Cog Menu Integration: Update static/app.js, templates/game.html, and static/style.css to replace stacked bottom sheets with a single, scrollable modal/drawer accessible via the cog menu for secondary views like Tile Tracker and Move History.
-- Polish, Wiring, and Verification: Refine touch interactions, drag-and-drop support, layout responsiveness, and update README.md to document the mobile UX and accessibility fixes.
-
-## How to verify
-
-- `python -m unittest discover -v`
-- Expected: all green
+## Conventions
+- Keep the project documentation in README.md; keep this file short.
+- Do not commit `__pycache__`, `.aistudio/` or word lists over a few MB.

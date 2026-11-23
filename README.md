@@ -6,7 +6,7 @@ on the server (the single source of truth), vanilla JS/HTML/CSS on the client
 
 ## Features
 
-- Server-authoritative 15x15 board, standard 100-tile bag, 7-tile racks, scores, turn order.
+- Server-authoritative board (Wild: 25x25 matrix, Classic: 15x15), 7-tile racks, 7-tile racks, scores, turn order.
 - **Mobile UI & Clutter Reduction Layout (Phase 3 Verified)**: Maximizes board visibility via full-viewport layout, a collapsible top-right player drawer/overlay, unified scrollable drawer accessible via cog menu, and a contextual action bar with intelligent ghosting/transparency for disabled buttons and responsive touch drag-and-drop support.
 - Rooms: `POST /create` returns an 8-character code and a shareable `/join/<code>` URL.
 - Placement rules (first word covers the centre, later words connect, one line, no gaps),
@@ -27,8 +27,8 @@ on the server (the single source of truth), vanilla JS/HTML/CSS on the client
 - Game settings, changeable by **either player inside the room until the first turn is played**
   (rooms are created with the defaults, **Wild** and **Full**):
   - **Mode**
-    - **Wild** (default) - uses the Letter League board layout from `wild_rules.txt`: no triple word
-      squares (corners are plain, the four edge middles are triple letters). By default every word is checked against the dictionary automatically
+    - **Wild** (default) - uses the 25x25 Letter League board matrix (`game/scoring.py`; start square (12, 12) has no bonus,
+      four triple word squares at (6, 6), (6, 18), (18, 6), (18, 18); the pattern repeats every 24 squares as the board grows). By default every word is checked against the dictionary automatically
       (the live preview shows validity and invalid plays are rejected). A tile placed on a
       double or triple letter square **keeps its multiplier for the rest of the game**, so
       later words that reuse it score the improved value. Boosted tiles are shown with
@@ -49,9 +49,25 @@ on the server (the single source of truth), vanilla JS/HTML/CSS on the client
   double/triple letter square shows its multiplied value (also while dragging). In Wild, the live
   preview marks every word with a tick or cross, and multiplied tiles are coloured in on the board.
 
+## Rules summary
+
+**Wild board** - a 25x25 matrix, start square (12, 12) with no bonus. Rows 0-6 are defined in
+`game/scoring.py` and mirrored; columns are mirror-symmetric, so the pattern repeats every 24 squares as the
+board grows. Triple word squares sit at (6, 6), (6, 18), (18, 6), (18, 18). The board starts 25x25 and grows
+when a tile lands within `expand_margin` (default 7) squares of an edge.
+
+**Scoring** - Wild: letter bonuses stay on the tile for good, word bonuses boost every letter of that word
+permanently (later letters added are not multiplied); a bingo (all 7 tiles) doubles the main word. Classic:
+bonuses count only on the turn they are covered, bingo is a flat 50. The letter L is worth 2 in the English set,
+and the sixth N is replaced by a second K. Bag sizes: short 50, medium 100, full 150.
+
+**Other rules** - 2-16 players in Wild (Classic is two-player); resigning returns tiles to the bag; in Wild, taking
+the last tile gives every other player one final turn; a play scoring 0 shows "0 points? 0 points!";
+after 30 s offline the others may skip a player; 6 scoreless turns in a row end the game.
+
 ## Languages
 
-English is always available (`words.txt`). Finnish, Swedish, French and Spanish have tile sets and
+English is always available (`data/en.txt`). Finnish, Swedish, French and Spanish have tile sets and
 values in `game/tiles.py`, but a language only becomes selectable (create / settings dialog) once its
 word list exists as `data/<code>.txt` (`fi`, `sv`, `fr`, `es`; UTF-8, one word per line, accents kept).
 Every tile is one character, so Spanish has no CH/LL/RR tiles.
@@ -68,7 +84,7 @@ game/
 static/             app.js, style.css
 templates/          index.html (home), game.html (board)
 tests/              unit tests for the rules engine
-words.txt           bundled word list, one word per line
+data/en.txt         English word list, one word per line (other languages: data/<code>.txt)
 Procfile            gunicorn -k eventlet entry for Railway/Render
 gunicorn.conf.py    gunicorn settings (single eventlet worker)
 requirements.txt
@@ -89,11 +105,13 @@ Open http://127.0.0.1:5000, click **Create game**, optionally pick the mode and
 length in the room, and send the link to your opponent (or open it in a second browser window to play both sides).
 Set `PORT` / `HOST` to change the address (`HOST=0.0.0.0` to play on your LAN).
 
-Run the tests:
+Run the tests (no word list needed; `tests/test_app.py` needs the requirements installed, otherwise it skips):
 
 ```bash
 python -m unittest discover -s tests -v
 ```
+
+CI (`.github/workflows/ci.yml`) runs the same command on every push and pull request.
 
 The browser loads the Socket.IO client from `cdn.socket.io`, so the page needs
 internet access (see TODO).
@@ -159,7 +177,7 @@ that sleep will drop idle games.
 
 ## Word list
 
-`words.txt` holds about 111,000 words (2-15 letters, lower case, one per line). It
+`data/en.txt` holds the English word list (2-15 letters, lower case, one per line). It
 is a **trimmed approximation** of a Scrabble dictionary, not an official one: it
 omits some valid words and may differ from TWL/NWL/Collins in places. For serious
 play, point `WORDS_FILE` at the full ENABLE or TWL list (any one-word-per-line
@@ -181,4 +199,3 @@ text file; non-alphabetic lines are ignored).
 - [ ] Rematch, spectators, GCG move-log export.
 - [ ] Rate limiting for socket events and room creation.
 - [ ] Self-host the socket.io client; add Playwright and Socket.IO integration tests.
-P3DR0 was here

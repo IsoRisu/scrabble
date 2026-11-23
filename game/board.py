@@ -10,14 +10,15 @@ from dataclasses import dataclass
 BOARD_SIZE = 15  # the classic grid the premium-square pattern is drawn on
 # The playing area starts as 27 columns x 19 rows around the centre star and grows
 # as tiles get close to an edge (see Board.expand_to_margin).
-BOARD_ROWS, BOARD_COLS = 19, 27
-CENTER = (7, 7)
+BOARD_ROWS, BOARD_COLS = 25, 25  # Wild: the 25x25 matrix in scoring.py
+CENTER = (7, 7)  # classic start star
+WILD_CENTER = (12, 12)
 
 
 def initial_bounds():
-    """Playing area of a fresh board: {"top", "bottom", "left", "right"} (inclusive)."""
-    top = CENTER[0] - (BOARD_ROWS - 1) // 2
-    left = CENTER[1] - (BOARD_COLS - 1) // 2
+    """Playing area of a fresh Wild board: {"top", "bottom", "left", "right"} (inclusive)."""
+    top = WILD_CENTER[0] - (BOARD_ROWS - 1) // 2
+    left = WILD_CENTER[1] - (BOARD_COLS - 1) // 2
     return {"top": top, "bottom": top + BOARD_ROWS - 1, "left": left, "right": left + BOARD_COLS - 1}
 
 
@@ -59,12 +60,14 @@ class Word:
 
 
 class Board:
-    def __init__(self, classic=False):
+    def __init__(self, classic=False, center=None):
         # Sparse grid: (row, col) -> Tile.  Coordinates never shift; the
-        # playable area is the rectangle below, which starts as 27x19 and grows
+        # playable area is the rectangle below, which starts as 25x25 and grows
         # in any direction (negative coordinates are valid) when auto-expansion is on.
         self.grid = {}
-        # Classic is the standard 15x15 Scrabble grid; Wild starts 27x19 and grows.
+        # Start square: the classic star, or the Wild matrix centre (override via `center`).
+        self.center = center or (CENTER if classic else WILD_CENTER)
+        # Classic is the standard 15x15 Scrabble grid; Wild starts 25x25 and grows.
         start = self._start = classic_bounds() if classic else initial_bounds()
         self.top, self.left = start["top"], start["left"]
         self.bottom, self.right = start["bottom"], start["right"]
@@ -188,7 +191,7 @@ class Board:
 
         first_move = self.is_empty()
         if first_move:
-            if CENTER not in new:
+            if self.center not in new:
                 raise GameError("The first word must cover the centre star.")
             if len(new) < 2:
                 raise GameError("The first word must be at least two letters long.")
