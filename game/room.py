@@ -428,6 +428,9 @@ class Room:
             self.mode, self.length, self.timer, self.expand_margin, self.max_players, self.language
         ) and self.auto_expand == expand_before[0] and self.auto_check == auto_check_before:
             return
+        if self.auto_check != auto_check_before:
+            self._log("system", f"{player.name} turned the dictionary check {'on' if self.auto_check else 'off'}"
+                      + ("." if self.auto_check else ": words are no longer validated automatically."))
         length_changed = length != self.length
         language_changed = language != self.language
         self.mode, self.length, self.timer = mode, length, timer
@@ -451,6 +454,40 @@ class Room:
         if auto_length:
             self._log("system", f"The game length was raised to {length} so every player gets a full rack.")
         self.maybe_start()  # lowering the player count may make the room full
+
+    # ---- restart -----------------------------------------------------
+    def restart(self, player):
+        """Start over with the same players and settings: empty board, scores 0, fresh bag and racks, new clock."""
+        if self.status == "waiting":
+            raise GameError("The game has not started yet.")
+        if len(self.players) < MIN_PLAYERS:
+            raise GameError("Waiting for at least one more player.")
+        self.board = Board(classic=self.mode == "classic")
+        self.turns_played = 0
+        self.scoreless_turns = 0
+        self.last_move = None
+        self.awaiting_final = False
+        self.final_round = None
+        self.winner = None
+        self.final = None
+        self.timer_paused_left = None
+        self.turn_deadline = None
+        self._clock_sig = None
+        for p in self.players:
+            p.score = 0
+            p.resigned = False
+            p.pending = []
+            p.staged = []
+            p.staged_preview = None
+            p.stage_note = None
+            p.preview = None
+        self._deal()  # fresh bag for the chosen length and language, new racks
+        self.current = self.rng.randrange(len(self.players))
+        self.status = "playing"
+        self._sync_clock()  # restarts the turn timer
+        for p in self.players:
+            p.preview = self._preview(p)
+        self._log("system", f"{player.name} restarted the game - {self.players[self.current].name} goes first.")
 
     # ---- players -----------------------------------------------------
     def add_player(self, name):

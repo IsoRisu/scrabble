@@ -61,6 +61,20 @@
         <button id="btn-drawer-tracker-toggle" class="ll-pill" type="button">Stats</button>
         <button id="btn-resign" class="ll-pill ll-pill-danger" type="button" hidden>Resign</button>
       </div>
+      <section id="game-settings" class="ll-settings" aria-label="Game settings">
+        <h3>Game settings <span id="settings-lock" class="ll-lock" hidden>&#128274; locked</span></h3>
+        <dl class="ll-settings-grid">
+          <dt>Language</dt><dd id="set-language">&ndash;</dd>
+          <dt>Dictionary check</dt><dd id="set-check">&ndash;</dd>
+          <dt>Turn timer</dt><dd id="set-timer">&ndash;</dd>
+          <dt>Game length</dt><dd id="set-length">&ndash;</dd>
+        </dl>
+        <p id="settings-note" class="ll-settings-note"></p>
+        <div class="ll-menu-actions">
+          <button id="btn-settings" class="ll-pill" type="button">Edit settings</button>
+          <button id="btn-restart" class="ll-pill ll-pill-danger ll-restart" type="button">Restart game</button>
+        </div>
+      </section>
       <div id="tracker" class="tracker" aria-label="Unseen tiles" hidden></div>
       <div id="share" class="share" hidden>
         <p>Waiting for players. Send them this link:</p>
@@ -109,15 +123,6 @@
       </div>
     </footer>
 
-    <div id="settings-overlay" class="settings-overlay modal-backdrop" hidden>
-      <div class="modal settings-modal" role="dialog" aria-modal="true" aria-label="Game Settings">
-        <h2>Game Settings</h2>
-        <button id="btn-settings" class="btn btn-wide" type="button">Edit Game Settings</button>
-        <div class="actions">
-          <button id="btn-close-settings" class="btn btn-primary" type="button">Close</button>
-        </div>
-      </div>
-    </div>
   </main>
 
   <div id="modal-root"></div>

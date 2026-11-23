@@ -969,3 +969,7 @@ button, .btn, .icon-btn, select, input[type="text"], .tile, .cell.can-drop {
   min-height: 48px;
   min-width: 48px;
 }
+/* Lobby: dictionary-check toggle */
+.field-check .check-row { display: flex; align-items: flex-start; gap: 12px; cursor: pointer; }
+.field-check input[type="checkbox"] { width: 22px; height: 22px; margin-top: 2px; flex: 0 0 auto; accent-color: var(--accent-dark); }
+.field-check small { display: block; font-weight: 500; color: var(--muted); font-size: .82em; margin-top: 2px; }

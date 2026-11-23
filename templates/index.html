@@ -56,10 +56,29 @@
             </select>
           </label>
         </div>
+        <div class="field">
+          <label for="create-language"><span>Language</span>
+            <select id="create-language">
+              <option value="en" selected>English</option>
+              <option value="fi">Suomi (Finnish)</option>
+              <option value="sv">Svenska (Swedish)</option>
+              <option value="fr">Français (French)</option>
+              <option value="es">Español (Spanish)</option>
+            </select>
+          </label>
+        </div>
+        <div class="field field-check">
+          <label for="create-autocheck" class="check-row">
+            <input id="create-autocheck" type="checkbox" checked>
+            <span><b>Dictionary check (challenge feature)</b>
+              <small>On: words are validated automatically against the dictionary. Off: automatic validation is disabled and any tile placement is accepted (useful for Finnish, which has no complete word list).</small>
+            </span>
+          </label>
+        </div>
         <button id="create-btn" class="btn btn-primary btn-wide" type="submit">Create game</button>
       </form>
       <p id="create-error" class="form-error" role="alert" hidden></p>
-      <p class="hint">You'll get a link to send to friends. Game mode, length and timer can also be changed in the room before the first turn.</p>
+      <p class="hint">You'll get a link to send to friends. Game mode, language, dictionary check, length and timer can also be changed in the room before the first turn.</p>
     </section>
 
     <section class="card">

@@ -202,3 +202,15 @@ body .ll-bubble.bottom-sheet-status { display: block !important; position: relat
   .ll-players { width: 13rem; }
 }
 @media (max-height: 640px) { .ll-mascot { display: none; } }
+
+/* ---- in-game settings section ---- */
+.ll-settings { background: #ffe6c8; border-radius: .8rem; padding: .7rem .9rem; display: flex; flex-direction: column; gap: .5rem; }
+.ll-settings h3 { margin: 0; font-size: 1.1rem; text-transform: uppercase; display: flex; justify-content: space-between; align-items: center; }
+.ll-lock { font-size: .8rem; background: #4a2416; color: #fff; padding: .1rem .6rem; border-radius: 99px; }
+.ll-settings-grid { display: grid; grid-template-columns: auto 1fr; gap: .25rem 1rem; margin: 0; font-size: 1rem; }
+.ll-settings-grid dt { font-weight: 700; color: #8b556a; }
+.ll-settings-grid dd { margin: 0; font-weight: 800; text-align: right; }
+.ll-settings.is-locked .ll-settings-grid dd { opacity: .75; }
+.ll-settings-note { margin: 0; font-size: .85rem; color: #8b556a; }
+.ll-settings .ll-pill:disabled { opacity: .45; cursor: not-allowed; filter: grayscale(.4); }
+.ll-restart { background: #d8402b; }

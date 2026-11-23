@@ -338,6 +338,12 @@ def on_update_settings(room, player, data):
     }
 
 
+@game_action("restart_game")
+def on_restart_game(room, player, data):
+    """Clear the board, reset scores and the turn timer, and deal new racks from a refilled bag."""
+    room.restart(player)
+
+
 @game_action("start_game")
 def on_start_game(room, player, data):
     """Host starts the game before the room is full (needs at least two players)."""

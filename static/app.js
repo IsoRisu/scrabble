@@ -79,11 +79,13 @@
       const mode = $('create-mode') ? $('create-mode').value : 'wild';
       const length = $('create-length') ? $('create-length').value : 'medium';
       const timer = $('create-timer') ? $('create-timer').value : 'off';
+      const language = $('create-language') ? $('create-language').value : 'en';
+      const auto_check = $('create-autocheck') ? $('create-autocheck').checked : true;
       try {
         const res = await fetch('/create', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mode, length, timer }),
+          body: JSON.stringify({ mode, length, timer, language, auto_check }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || 'Could not create a game.');
@@ -509,6 +511,38 @@
       const locked = S.status === 'finished' || S.settings_locked;
       els.settingsBtn.disabled = locked;
       els.settingsBtn.title = locked ? 'Settings can only be changed before the first turn is played' : '';
+      const set = (id, text) => { const el = $(id); if (el) el.textContent = text; };
+      const check = S.auto_check !== undefined ? S.auto_check : S.mode === 'wild';
+      set('set-language', LANGUAGE_NAME[S.language] || S.language || '');
+      set('set-check', check ? 'On (automatic word check)' : 'Off (no automatic validation)');
+      set('set-timer', timerText(S.timer));
+      set('set-length', lengthText(S.length));
+      const lock = $('settings-lock');
+      if (lock) lock.hidden = !locked;
+      const note = $('settings-note');
+      if (note) note.textContent = locked
+        ? 'Settings are locked because the first turn has been played. Restart the game to change them.'
+        : 'Anyone in the room can change these until the first turn is played.';
+      const group = $('game-settings');
+      if (group) group.classList.toggle('is-locked', !!locked);
+      const restart = $('btn-restart');
+      if (restart) restart.disabled = S.status === 'waiting';
+    }
+
+    function confirmRestart() {
+      if (!S || S.status === 'waiting') return;
+      showModal((modal, api) => {
+        modal.append(
+          h('h2', { text: 'Restart game?' }),
+          h('p', { text: 'The board is cleared, all scores and timers are reset and every rack is dealt again from a fresh bag. Players stay in the room.' }),
+          h('div', { class: 'actions' },
+            h('button', { class: 'btn', type: 'button', text: 'Cancel', onclick: () => api.close() }),
+            h('button', { class: 'btn btn-primary', type: 'button', text: 'Restart', onclick: () => {
+              api.close();
+              act('restart_game', {}, () => toast('Game restarted.'));
+            } })),
+        );
+      });
     }
 
     function openSettingsModal() {
@@ -1888,6 +1922,7 @@
     });
 
     els.settingsBtn.addEventListener('click', openSettingsModal);
+    if ($('btn-restart')) $('btn-restart').addEventListener('click', confirmRestart);
     if (els.cogBtn) {
       els.cogBtn.addEventListener('click', () => {
         const secondarySec = $('unified-drawer-secondary-section');
