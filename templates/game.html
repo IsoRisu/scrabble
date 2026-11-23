@@ -3,88 +3,111 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Scrabble - room {{ code }}</title>
+  <title>Word Game - room {{ code }}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='shell.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='board.css') }}">
 </head>
 <body data-page="game" data-room="{{ code }}" data-mode="{{ mode }}" data-length="{{ length }}" data-timer="{{ timer }}">
   <div id="toast" class="toast" role="alert" hidden></div>
   <div class="sr-only" aria-live="polite" id="a11y-announcer"></div>
 
-  <!-- Optimized full screen game viewport -->
-  <main class="game-viewport">
-    <section class="board-col">
+  <!-- Fixed full-viewport game shell -->
+  <main class="ll-app">
+    <section class="ll-stage">
       <div class="board-wrap">
         <div id="board-scroll" class="board-scroll">
-          <div id="board" class="board" role="grid" aria-label="Scrabble board"></div>
+          <div id="board" class="board" role="grid" aria-label="Game board"></div>
         </div>
         <canvas id="minimap" class="minimap" width="132" height="96" hidden aria-label="Board overview: tap to jump"></canvas>
       </div>
     </section>
 
-    <header class="floating-topbar">
-      <a class="brand" href="/">SCRABBLE</a>
-      <div class="roominfo">
-        Room <code id="room-code">{{ code }}</code>
-        <span class="sep">&middot;</span>
-        <span id="mode-label"></span>
+    <!-- Top bar: timer + turn indicator -->
+    <header class="ll-topbar">
+      <div class="ll-timer-card">
+        <div class="ll-timer-row">
+          <span class="ll-timer-icon" aria-hidden="true"></span>
+          <div id="timer" class="timer ll-timer-num" aria-label="Turn timer"></div>
+          <div class="ll-timer-side">
+            <span class="ll-timer-label">Seconds remaining</span>
+            <button id="btn-timer-toggle" class="ll-pill" type="button" hidden>Pause timer</button>
+            <button id="btn-skip-time" class="ll-pill ll-pill-danger" type="button" hidden>Skip</button>
+          </div>
+        </div>
+        <div class="ll-turn-row">
+          <button id="btn-pass" class="ll-pass" type="button" disabled title="Pass turn">Pass turn</button>
+          <span class="ll-turn-nav"><span aria-hidden="true">&#9198;</span><b id="turn-number">Turn 1</b><span aria-hidden="true">&#9197;</span></span>
+        </div>
       </div>
-      <span id="conn" class="conn conn-wait" title="Connection status">conn&hellip;</span>
-      <button id="btn-cog" class="icon-btn cog-btn" type="button" title="Settings & Options" aria-label="Settings and Options">&#9881;</button>
-      <button id="btn-info" class="icon-btn" type="button" title="Game info" aria-label="Game info">i</button>
+      <div id="turn-banner" class="turn-banner ll-turn" role="status" aria-live="polite">Connecting&hellip;</div>
     </header>
 
-    <div id="turn-banner" class="turn-banner floating-turn" role="status" aria-live="polite">Connecting&hellip;</div>
+    <button id="btn-cog" class="ll-menu-btn" type="button" title="Menu" aria-label="Menu">
+      <i></i><i></i><i></i>
+    </button>
 
-    <div id="players-overlay-panel" class="floating-overlay-panel top-right-overlay">
-      <div class="overlay-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-        <span style="font-size: 11px; font-weight: 800; text-transform: uppercase; color: var(--muted);">Players</span>
-        <button id="btn-toggle-players" class="overlay-toggle-btn" type="button" aria-expanded="true" aria-label="Toggle player list">&#9650; Hide</button>
+    <!-- Slide-down menu / extras (share link, tracker, move history) -->
+    <div id="unified-drawer-secondary-section" class="unified-drawer-secondary-section ll-menu" hidden>
+      <div class="ll-menu-head">
+        <span>Room <code id="room-code">{{ code }}</code> &middot; <span id="mode-label"></span></span>
+        <span id="conn" class="conn conn-wait" title="Connection status">conn&hellip;</span>
       </div>
-      <div id="players" class="players"></div>
-      <div class="bag-float">Bag: <b id="bag-count">&ndash;</b></div>
-      <div id="timer" class="timer" aria-label="Turn timer"></div>
-      <div class="timer-actions">
-        <button id="btn-timer-toggle" class="btn btn-small" type="button" hidden>Pause</button>
-        <button id="btn-skip-time" class="btn btn-small btn-danger" type="button" hidden>Skip</button>
+      <div class="ll-menu-actions">
+        <button id="btn-info" class="ll-pill" type="button">How to play</button>
+        <button id="btn-zoom" class="ll-pill zoom-btn" type="button" aria-pressed="false">Zoom</button>
+        <button id="btn-drawer-tracker-toggle" class="ll-pill" type="button">Stats</button>
+        <button id="btn-resign" class="ll-pill ll-pill-danger" type="button" hidden>Resign</button>
       </div>
-      <button id="btn-challenge" class="btn btn-danger btn-small" type="button" hidden>Challenge</button>
+      <div id="tracker" class="tracker" aria-label="Unseen tiles" hidden></div>
+      <div id="share" class="share" hidden>
+        <p>Waiting for players. Send them this link:</p>
+        <div class="row">
+          <input id="share-url" type="text" readonly aria-label="Shareable link">
+          <button id="share-copy" class="btn" type="button">Copy</button>
+        </div>
+        <button id="btn-start" class="btn btn-primary btn-wide" type="button" hidden style="margin-top: 8px">Start now</button>
+      </div>
+      <div class="history-wrap">
+        <h3>Moves</h3>
+        <ol id="history" class="history"></ol>
+      </div>
     </div>
 
-    <div class="floating-bottom-overlay mobile-bottom-sheet unified-scrollable-drawer" role="region" aria-label="Game controls and tile rack">
-      <div class="bottom-sheet-header" style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 4px;">
-        <div class="bottom-sheet-status" id="bottom-sheet-status-text">Your rack appears when the game starts</div>
-        <button id="btn-toggle-drawer" class="overlay-toggle-btn drawer-toggle-btn" type="button" aria-expanded="true" aria-label="Toggle collapsible drawer">&#9650; Hide Drawer</button>
+    <!-- Players panel, bottom right -->
+    <aside id="players-overlay-panel" class="ll-players">
+      <div class="ll-players-head">
+        <span>Players</span>
+        <button id="btn-toggle-players" class="ll-collapse" type="button" aria-expanded="true" aria-label="Toggle player list">&minus;</button>
       </div>
-      <div class="collapsible-drawer-content unified-drawer-scroll-body">
-        <div id="preview" class="preview" aria-live="polite"></div>
+      <div class="ll-players-body">
+        <div id="players" class="players"></div>
+        <div class="ll-players-foot">
+          <span class="bag-float">Bag: <b id="bag-count">&ndash;</b></span>
+          <button id="btn-challenge" class="ll-pill ll-pill-danger" type="button" hidden>Challenge</button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Bottom bar: mascot + speech bubble, tile rack with actions -->
+    <footer class="ll-bottom ll-bottom-bar" role="region" aria-label="Game controls and tile rack">
+      <div class="ll-mascot-wrap">
+        <div class="ll-mascot" aria-hidden="true"><i></i><i></i></div>
+        <div id="bottom-sheet-status-text" class="ll-bubble bottom-sheet-status">Your rack appears when the game starts</div>
+      </div>
+      <div class="ll-rack-area">
+        <div id="preview" class="preview ll-preview" aria-live="polite"></div>
+        <div class="ll-actions mobile-action-controls">
+          <button id="btn-swap" class="ll-act ll-act-orange" type="button" disabled title="Swap tiles">Swap</button>
+          <button id="btn-submit" class="ll-act ll-act-play" type="button" disabled title="Play word">Play</button>
+          <button id="btn-shuffle" class="ll-act ll-act-orange" type="button" title="Shuffle rack">Shuffle</button>
+          <button id="btn-recall" class="ll-act ll-act-mini" type="button" disabled title="Recall tiles">&#8634;</button>
+        </div>
         <div id="rack" class="rack" aria-label="Your tile rack" tabindex="0"></div>
-        <div class="contextual-action-bar controls mobile-action-controls">
-          <button id="btn-submit" class="btn btn-primary" type="button" disabled title="Play word">&#10003; Play</button>
-          <button id="btn-recall" class="btn" type="button" disabled title="Recall tiles">&#8634; Recall</button>
-          <button id="btn-swap" class="btn" type="button" disabled title="Swap tiles">&#8646; Swap</button>
-          <button id="btn-shuffle" class="btn" type="button" title="Shuffle rack">&#128256; Shuffle</button>
-          <button id="btn-zoom" class="btn zoom-btn" type="button" aria-pressed="false" title="Zoom board">&#128269; Zoom</button>
-          <button id="btn-pass" class="btn" type="button" disabled title="Pass turn">&#9193; Pass</button>
-          <button id="btn-resign" class="btn btn-danger" type="button" hidden title="Resign">&#10005; Resign</button>
-          <button id="btn-drawer-tracker-toggle" class="btn" type="button" title="Toggle Tile Tracker & History">📊 Stats & Moves</button>
-        </div>
-        <div id="unified-drawer-secondary-section" class="unified-drawer-secondary-section" hidden>
-          <div id="tracker" class="tracker" aria-label="Unseen tiles" hidden></div>
-          <div id="share" class="share" hidden>
-            <p>Waiting for players. Send them this link:</p>
-            <div class="row">
-              <input id="share-url" type="text" readonly aria-label="Shareable link">
-              <button id="share-copy" class="btn" type="button">Copy</button>
-            </div>
-            <button id="btn-start" class="btn btn-primary btn-wide" type="button" hidden style="margin-top: 8px">Start now</button>
-          </div>
-          <div class="history-wrap">
-            <h3>Moves</h3>
-            <ol id="history" class="history"></ol>
-          </div>
-        </div>
       </div>
-    </div>
+    </footer>
 
     <div id="settings-overlay" class="settings-overlay modal-backdrop" hidden>
       <div class="modal settings-modal" role="dialog" aria-modal="true" aria-label="Game Settings">

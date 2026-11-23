@@ -1,0 +1,55 @@
+/* Run 2: Letter League-style board. Loaded after shell.css. */
+:root {
+  --b-line: #fff1de;
+  --b-cell: #ffe1c0;
+  --b-2l: #abe6ff; --b-2l-ink: #6cc3ec;
+  --b-3l: #ffd05f; --b-3l-ink: #f0a81c;
+  --b-2w: #aef6ab; --b-2w-ink: #5fd35b;
+  --b-3w: #ff9a72; --b-3w-ink: #ec6a3c;
+  --b-gap: 2px;
+}
+.ll-stage .board-scroll { width: 100%; height: 100%; }
+.ll-stage .board {
+  width: min(96vw, calc((100vh - 9rem) * var(--cols) / var(--rows)));
+  gap: var(--b-gap); padding: 0; margin: 0 auto;
+  background: var(--b-line); border-radius: 0; box-shadow: none;
+  outline: var(--b-gap) solid var(--b-line);
+}
+.ll-stage .board .cell {
+  border-radius: 0; background: var(--b-cell);
+  font-family: "Barlow Condensed", "Nunito", ui-rounded, "Segoe UI", system-ui, sans-serif;
+  font-weight: 800; letter-spacing: .01em;
+  font-size: max(8px, calc(100cqw / var(--cols) * .4));
+}
+.ll-stage .board .cell.dl { background: var(--b-2l); color: var(--b-2l-ink); }
+.ll-stage .board .cell.tl { background: var(--b-3l); color: var(--b-3l-ink); }
+.ll-stage .board .cell.dw { background: var(--b-2w); color: var(--b-2w-ink); }
+.ll-stage .board .cell.tw { background: var(--b-3w); color: var(--b-3w-ink); }
+.ll-stage .board .cell.center {
+  background: #fff1de; color: #8a4de0; font-size: max(12px, calc(100cqw / var(--cols) * .6));
+}
+.ll-stage .board .cell.center.drop-ok, .ll-stage .board .cell.drop-ok { outline-offset: -3px; }
+.ll-stage .board .tile { border-radius: 18%; }
+/* zoomed view keeps the same flat grid */
+.ll-stage .board-scroll.zoomed { max-height: none; background: transparent; }
+.ll-stage .board-scroll.zoomed .board {
+  width: calc(var(--zoom-cell) * var(--cols) + var(--b-gap) * (var(--cols) - 1));
+}
+.minimap { display: none !important; }
+
+/* ---- Run 3: zoom, pan, polish ---- */
+.ll-stage .board-scroll {
+  display: grid; overflow: hidden; overscroll-behavior: none; scrollbar-width: none; cursor: default;
+}
+.ll-stage .board-scroll::-webkit-scrollbar { display: none; }
+.ll-stage .board-scroll .board { margin: auto; }
+.ll-stage .board-scroll.zoomed {
+  overflow: auto; width: 100%; height: 100%; max-height: none; cursor: grab; touch-action: none;
+}
+.ll-stage .board-scroll.zoomed .board { max-width: none; flex: none; }
+.ll-stage .board-scroll.panning { cursor: grabbing; }
+html, body[data-page="game"] { overflow: hidden !important; height: 100vh; position: fixed; width: 100%; }
+body[data-page="game"], body[data-page="game"] button { font-family: "Barlow Condensed", "Nunito", ui-rounded, system-ui, sans-serif; }
+.ll-stage .board .cell.dl, .ll-stage .board .cell.tl, .ll-stage .board .cell.dw, .ll-stage .board .cell.tw { text-shadow: 0 1px 0 rgba(255,255,255,.25); }
+.ll-stage .board .tile { background: linear-gradient(#ff8f65, #ff6f43); box-shadow: 0 .15rem 0 #c9553a; color: #fff; }
+.ll-rack-area .rack .tile { border-radius: .7rem; box-shadow: 0 .2rem 0 #c9553a; }

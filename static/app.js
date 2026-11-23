@@ -423,7 +423,7 @@
               role: 'gridcell',
               dataset: { row: String(r), col: String(c) },
             });
-            cell.dataset.label = isCenter ? '★' : (kind || '');
+            cell.dataset.label = isCenter ? '★' : ({ DL: '2L', TL: '3L', DW: '2W', TW: '3W' }[kind] || '');
             cell.dataset.sig = '';
             fragment.append(cell);
             cells.set(`${r},${c}`, cell);
@@ -680,7 +680,7 @@
       const opp = opponent();
       if (S.status === 'waiting') {
         els.banner.textContent = '';
-        els.banner.className = 'turn-banner';
+        els.banner.className = 'turn-banner ll-turn';
         return;
       } else if (S.status === 'finished') {
         text = S.winner === 'tie' ? "Game over – it's a tie!"
@@ -705,7 +705,11 @@
         text += offline.length === 1 ? ` — ${offline[0].name} is offline` : ' — some players are offline';
       }
       els.banner.textContent = text;
-      els.banner.className = `turn-banner ${cls}`;
+      els.banner.className = `turn-banner ll-turn ${cls}`;
+      const tn = $('turn-number');
+      if (tn) tn.textContent = `Turn ${(S.history ? S.history.filter((e) => e.kind !== 'system').length : 0) + 1}`;
+      const bub = $('bottom-sheet-status-text');
+      if (bub && S.status !== 'waiting') bub.textContent = myTurn() ? "It's your turn!" : text;
     }
 
     function renderBoard() {
@@ -831,7 +835,7 @@
       const totalSlots = totalActive + (showPlaceholder ? 1 : 0);
       els.players.classList.toggle('many', totalSlots > 4);
 
-      let overlayPanel = document.querySelector('.floating-overlay-panel');
+      let overlayPanel = document.querySelector('.ll-players');
       const toggleBtn = document.getElementById('btn-toggle-players');
       if (toggleBtn && overlayPanel && !toggleBtn._wired) {
         toggleBtn._wired = true;
@@ -1048,17 +1052,19 @@
 
       // Toggle visibility/minimized state based on game start status
       const actionControlsEl = document.querySelector('.mobile-action-controls');
-      const bottomSheet = document.querySelector('.floating-bottom-overlay');
+      const bottomSheet = document.querySelector('.ll-bottom');
       const statusTextEl = document.getElementById('bottom-sheet-status-text');
       if (waiting) {
         if (actionControlsEl) actionControlsEl.style.display = 'none';
         if (bottomSheet) bottomSheet.classList.add('game-not-started');
-        if (statusTextEl) statusTextEl.style.display = 'block';
+        const menuEl = $('unified-drawer-secondary-section');
+        if (menuEl && !menuEl._auto) { menuEl._auto = true; menuEl.hidden = false; }
+        
         document.body.classList.remove('game-active');
       } else {
         if (actionControlsEl) actionControlsEl.style.display = '';
         if (bottomSheet) bottomSheet.classList.remove('game-not-started');
-        if (statusTextEl) statusTextEl.style.display = 'none';
+        
         document.body.classList.add('game-active');
       }
 
@@ -1072,7 +1078,7 @@
 
       els.submit.disabled = submitDisabled;
       els.submit.classList.toggle('btn-ghost', submitDisabled);
-      els.submit.textContent = staging && hasPending ? 'Staged – plays on your turn' : 'Play word';
+      els.submit.textContent = staging && hasPending ? 'Staged' : 'Play';
       els.submit.title = staging && hasPending ? 'Your staged word loads on your turn; then press Play word.' : '';
 
       els.recall.disabled = recallDisabled;
@@ -1581,7 +1587,7 @@
     }
     // Zoom factor 1x = 44px squares. Range 0.2x - 8x, eased towards a target on every frame.
     const ZBASE = 44;
-    const ZMIN = 0.2;
+    const ZMIN = 0.25;
     const ZMAX = 8;
     const MIN_CELL = ZBASE * ZMIN;
     const MAX_CELL = ZBASE * ZMAX;
@@ -1638,15 +1644,14 @@
     }
     const zoomNow = () => (zTarget !== null ? zTarget : (isZoomed() ? currentCell() : fitCell())) / ZBASE;
 
-    // Ctrl/Cmd + wheel (and trackpad pinch, which browsers report as ctrl+wheel) zooms at the cursor.
+    // Mouse wheel (and trackpad pinch) zooms at the cursor: scroll up = zoom in, scroll down = zoom out.
     els.boardScroll.addEventListener('wheel', (event) => {
-      if (!event.ctrlKey) return;   // plain scrolling is left alone
       event.preventDefault();
       let dy = event.deltaY;
       if (event.deltaMode === 1) dy *= 16;                 // lines -> px
       else if (event.deltaMode === 2) dy *= window.innerHeight;  // pages -> px
       const box = els.boardScroll.getBoundingClientRect();
-      setCellSize(zoomNow() * ZBASE * Math.exp(-dy * 0.0015), event.clientX - box.left, event.clientY - box.top);
+      setCellSize(zoomNow() * ZBASE * Math.exp(-dy * 0.0016), event.clientX - box.left, event.clientY - box.top);
     }, { passive: false });
 
     // ---------- zoom popover: a log-scale slider with a draggable ball ----------
@@ -1886,7 +1891,7 @@
     if (els.cogBtn) {
       els.cogBtn.addEventListener('click', () => {
         const secondarySec = $('unified-drawer-secondary-section');
-        const bottomSheet = document.querySelector('.floating-bottom-overlay');
+        const bottomSheet = document.querySelector('.ll-bottom');
         if (secondarySec && bottomSheet) {
           bottomSheet.classList.remove('collapsed-drawer');
           const toggleBtn = $('btn-toggle-drawer');
@@ -1920,7 +1925,7 @@
       });
     }
     const drawerToggleBtn = $('btn-toggle-drawer');
-    const bottomSheetEl = document.querySelector('.floating-bottom-overlay');
+    const bottomSheetEl = document.querySelector('.ll-bottom');
     if (drawerToggleBtn && bottomSheetEl) {
       drawerToggleBtn.addEventListener('click', () => {
         bottomSheetEl.classList.toggle('collapsed-drawer');
@@ -2037,3 +2042,6 @@
   if (document.body.dataset.page === 'game') initGame();
   else initIndex();
 })();
+
+// Fixed viewport: never let the page itself scroll or browser-zoom with the wheel.
+document.addEventListener('wheel', (e) => { if (e.ctrlKey || !e.target.closest('.ll-menu, .ll-players-body, .modal')) e.preventDefault(); }, { passive: false });
