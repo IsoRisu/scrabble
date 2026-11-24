@@ -231,6 +231,7 @@ body .ll-bubble.bottom-sheet-status { display: block !important; position: relat
 .bag-tile sup { position: absolute; top: .15rem; right: .3rem; font-size: .6rem; }
 .bag-tile .bag-n { position: absolute; left: 50%; bottom: -.55rem; transform: translateX(-50%); background: #4a2416; color: #fff; font-size: .72rem; border-radius: 99px; padding: 0 .4rem; }
 .bag-tile.is-empty { opacity: .35; }
+.bag-tile.is-active { }
 .bag-total { margin-top: 1rem; display: flex; align-items: baseline; gap: .5rem; font-weight: 700; color: #4a2416; }
 .bag-total b { font-size: 1.3rem; }
 .bag-total small { font-weight: 500; color: #8b556a; }
@@ -279,6 +280,7 @@ body .ll-bubble.bottom-sheet-status { display: block !important; position: relat
 .vic-who b { font-size: 1.5rem; }
 .vic-who span { color: #ff7a45; font-weight: 700; font-size: 1.15rem; }
 .vic-row.me .vic-who b { text-decoration: underline wavy #ffb02e; }
+.vic-row.vic-active { }
 .vic-avatar { display: inline-grid; place-items: center; border-radius: 50%; color: #fff; font-weight: 800; border: .15rem solid #ff8f65; flex: none; }
 .vic-avatar.sm { width: 2.6rem; height: 2.6rem; font-size: 1.4rem; }
 .vic-avatar.lg { width: 8rem; height: 8rem; font-size: 4rem; border-width: .3rem; }
