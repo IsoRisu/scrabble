@@ -48,6 +48,7 @@
 }
 .ll-stage .board-scroll.zoomed .board { max-width: none; flex: none; }
 .ll-stage .board-scroll.panning { cursor: grabbing; }
+.ll-stage .board-scroll.is-active { }
 html, body[data-page="game"] { overflow: hidden !important; height: 100vh; position: fixed; width: 100%; }
 body[data-page="game"], body[data-page="game"] button { font-family: "Barlow Condensed", "Nunito", ui-rounded, system-ui, sans-serif; }
 .ll-stage .board .cell.dl, .ll-stage .board .cell.tl, .ll-stage .board .cell.dw, .ll-stage .board .cell.tw { text-shadow: 0 1px 0 rgba(255,255,255,.25); }
