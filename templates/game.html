@@ -141,7 +141,8 @@
 
   <div id="modal-root"></div>
 
-  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js" crossorigin="anonymous" onerror="this.outerHTML='&lt;div class=&quot;banner banner-error&quot; role=&quot;alert&quot;&gt;Cannot reach the game server library. Check your connection and reload.&lt;/div&gt;'"></script>
+  <!-- TODO: download https://cdn.socket.io/4.7.5/socket.io.min.js to static/vendor/socket.io.min.js -->
+  <script src="/static/vendor/socket.io.min.js" crossorigin="anonymous" onerror="this.outerHTML='&lt;script src=&quot;https://cdn.socket.io/4.7.5/socket.io.min.js&quot; crossorigin=&quot;anonymous&quot;&gt;&lt;\/script>&lt;div class=&quot;banner banner-error&quot; role=&quot;alert&quot;&gt;Cannot reach the game server library. Check your connection and reload.&lt;/div&gt;'"></script>
   <script src="{{ url_for('static', filename='js/util.js') }}"></script>
   <script src="{{ url_for('static', filename='js/zoom.js') }}"></script>
   <script src="{{ url_for('static', filename='js/bag.js') }}"></script>
