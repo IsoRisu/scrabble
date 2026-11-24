@@ -242,6 +242,12 @@ def diff_views(old, new):
     """
     patch = {}
     for key, value in new.items():
+        if key == "plays" and old.get(key) == value:
+            continue
+        if key == "history" and old.get(key) == value:
+            continue
+        if key == "tiles" and old.get(key) == value:
+            continue
         if key != "board" and old.get(key) != value:
             patch[key] = value
     old_board, new_board = old.get("board", {}), new.get("board", {})
