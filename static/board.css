@@ -60,6 +60,11 @@ body[data-page="game"], body[data-page="game"] button { font-family: "Barlow Con
 @media (hover: none) and (pointer: coarse) {
   .cell.can-drop::after { display: block; }
 }
+.ll-mascot:focus-visible {
+  outline: 3px solid var(--hl);
+  outline-offset: 2px;
+}
+
 /* Mouse users get a hover highlight instead of the markers. */
 @media (hover: hover) and (pointer: fine) {
   .cell.can-drop:hover { outline: 3px solid var(--hl); outline-offset: -2px; z-index: 2; }
