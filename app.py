@@ -331,17 +331,46 @@ def on_update_settings(room, player, data):
 
     Either player may do this, but only before the first turn has been played.
     """
+    if not isinstance(data, dict):
+        raise GameError("Invalid payload.")
+    mode = data.get("mode")
+    if mode is not None and not isinstance(mode, str):
+        raise GameError("Invalid mode.")
+    length = data.get("length")
+    if length is not None and not isinstance(length, str):
+        raise GameError("Invalid length.")
+    timer = data.get("timer")
+    if timer is not None and not isinstance(timer, str):
+        raise GameError("Invalid timer.")
+    auto_expand = data.get("auto_expand")
+    if auto_expand is not None and not isinstance(auto_expand, bool):
+        raise GameError("Auto-expand must be true or false.")
+    expand_margin = data.get("expand_margin")
+    if expand_margin is not None and (not isinstance(expand_margin, int) or isinstance(expand_margin, bool)):
+        raise GameError("Expand margin must be a number.")
+    max_players = data.get("max_players")
+    if max_players is not None and (not isinstance(max_players, int) or isinstance(max_players, bool)):
+        raise GameError("Max players must be a number.")
+    language = data.get("language")
+    if language is not None and not isinstance(language, str):
+        raise GameError("Invalid language.")
+    auto_check = data.get("auto_check")
+    if auto_check is not None and not isinstance(auto_check, bool):
+        raise GameError("Auto-check must be true or false.")
+    show_distribution = data.get("show_distribution")
+    if show_distribution is not None and not isinstance(show_distribution, bool):
+        raise GameError("Show distribution must be true or false.")
     room.update_settings(
         player,
-        mode=data.get("mode"),
-        length=data.get("length"),
-        timer=data.get("timer"),
-        auto_expand=data.get("auto_expand"),
-        expand_margin=data.get("expand_margin"),
-        max_players=data.get("max_players"),
-        language=data.get("language"),
-        auto_check=data.get("auto_check"),
-        show_distribution=data.get("show_distribution"),
+        mode=mode,
+        length=length,
+        timer=timer,
+        auto_expand=auto_expand,
+        expand_margin=expand_margin,
+        max_players=max_players,
+        language=language,
+        auto_check=auto_check,
+        show_distribution=show_distribution,
     )
     return {
         "mode": room.mode, "length": room.length, "timer": room.timer,
@@ -354,18 +383,24 @@ def on_update_settings(room, player, data):
 @game_action("restart_game")
 def on_restart_game(room, player, data):
     """Clear the board, reset scores and the turn timer, and deal new racks from a refilled bag."""
+    if not isinstance(data, dict):
+        raise GameError("Invalid payload.")
     room.restart(player)
 
 
 @game_action("new_game")
 def on_new_game(room, player, data):
     """Reset a finished room back to the lobby (board, scores, racks and bag cleared)."""
+    if not isinstance(data, dict):
+        raise GameError("Invalid payload.")
     room.reset_to_lobby(player)
 
 
 @game_action("start_game")
 def on_start_game(room, player, data):
     """Host starts the game before the room is full (needs at least two players)."""
+    if not isinstance(data, dict):
+        raise GameError("Invalid payload.")
     room.start_now(player)
 
 
@@ -381,31 +416,44 @@ def on_skip_player(room, player, data):
 @game_action("resign")
 def on_resign(room, player, data):
     """Give up the game. Two players: the opponent wins. More: the game goes on without you."""
+    if not isinstance(data, dict):
+        raise GameError("Invalid payload.")
     return room.resign(player)
 
 
 @game_action("pause_timer")
 def on_pause_timer(room, player, data):
     """Freeze the turn timer (Wild only, any player)."""
+    if not isinstance(data, dict):
+        raise GameError("Invalid payload.")
     return room.pause_timer(player)
 
 
 @game_action("resume_timer")
 def on_resume_timer(room, player, data):
     """Let a paused turn timer run again (Wild only, any player)."""
+    if not isinstance(data, dict):
+        raise GameError("Invalid payload.")
     return room.resume_timer(player)
 
 
 @game_action("skip_overtime")
 def on_skip_overtime(room, player, data):
     """The host skips the player on turn once their timer has run out (Wild only)."""
+    if not isinstance(data, dict):
+        raise GameError("Invalid payload.")
     return room.skip_overtime(player)
 
 
 @game_action("place_tiles")
 def on_place_tiles(room, player, data):
     """Replace the player's tentative placement: {"placements": [{rack_index, row, col, letter?}]}."""
-    room.place_tiles(player, data.get("placements"))
+    if not isinstance(data, dict):
+        raise GameError("Invalid payload.")
+    placements = data.get("placements")
+    if placements is not None and not isinstance(placements, list):
+        raise GameError("Invalid placements.")
+    room.place_tiles(player, placements)
 
 
 @game_action("stage_tiles")
@@ -414,24 +462,38 @@ def on_stage_tiles(room, player, data):
 
     Private to the sender; it becomes their tentative placement when their turn starts.
     """
-    room.stage_tiles(player, data.get("placements"))
+    if not isinstance(data, dict):
+        raise GameError("Invalid payload.")
+    placements = data.get("placements")
+    if placements is not None and not isinstance(placements, list):
+        raise GameError("Invalid placements.")
+    room.stage_tiles(player, placements)
 
 
 @game_action("submit_word")
 def on_submit_word(room, player, data):
     """Commit the tentative placement: validate, score, draw tiles, pass the turn."""
+    if not isinstance(data, dict):
+        raise GameError("Invalid payload.")
     return room.submit(player)
 
 
 @game_action("pass")
 def on_pass(room, player, data):
+    if not isinstance(data, dict):
+        raise GameError("Invalid payload.")
     return room.pass_turn(player)
 
 
 @game_action("swap_tiles")
 def on_swap_tiles(room, player, data):
     """Exchange tiles with the bag: {"indices": [rack indices]}."""
-    return room.swap(player, data.get("indices"))
+    if not isinstance(data, dict):
+        raise GameError("Invalid payload.")
+    indices = data.get("indices")
+    if indices is not None and not isinstance(indices, list):
+        raise GameError("Invalid indices.")
+    return room.swap(player, indices)
 
 
 @game_action("challenge_skip")
@@ -440,6 +502,8 @@ def on_challenge_skip(room, player, data):
 
     A failed challenge costs the challenger their turn - hence "skip".
     """
+    if not isinstance(data, dict):
+        raise GameError("Invalid payload.")
     return room.challenge(player)
 
 
