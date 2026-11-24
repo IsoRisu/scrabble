@@ -1360,12 +1360,19 @@ class Room:
 
 
 # --------------------------------------------------------------------------
+# Registry limits and cleanup TTL defaults (in seconds)
+DEFAULT_MAX_ROOMS = 2000
+DEFAULT_IDLE_TTL = 24 * 3600
+DEFAULT_ABANDONED_TTL = 2 * 3600
+
+
+# --------------------------------------------------------------------------
 # Registry
 # --------------------------------------------------------------------------
 class RoomRegistry:
     """All live rooms, held in memory. A restart forgets every game (see README TODOs)."""
 
-    def __init__(self, max_rooms=2000, idle_ttl=24 * 3600, abandoned_ttl=2 * 3600):
+    def __init__(self, max_rooms=DEFAULT_MAX_ROOMS, idle_ttl=DEFAULT_IDLE_TTL, abandoned_ttl=DEFAULT_ABANDONED_TTL):
         self._rooms = {}
         self._lock = threading.Lock()
         self.max_rooms = max_rooms
