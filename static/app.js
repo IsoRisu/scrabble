@@ -579,7 +579,7 @@
       renderControls();
       renderTracker();
       
-      renderBagUi();
+      if (window.App.bag) window.App.bag.renderBagUi(S);
       renderSettingsButton();
       renderTimer();
       els.modeLabel.textContent = `${modeLabel(S.mode)} · ${lengthText(S.length)}${timerShort(S.timer)}`;
@@ -593,112 +593,6 @@
       queueMinimap();
     }
 
-    // ---------- tile bag badge + popover (TILE BAG / DEFINITIONS tabs) ----------
-    function renderBagUi() {
-      const badge = $('bag-badge');
-      if (badge) badge.textContent = String(S.bag_count);
-      renderDefs();
-      const pop = $('bag-pop');
-      if (!pop || pop.hidden) return;
-      const t = S.tiles || {};
-      const body = $('bag-tab-bag');
-      body.replaceChildren();
-      if (S.show_distribution === false || t.hidden) {
-        body.append(h('p', { class: 'bag-hidden', text: 'The tile distribution is hidden in this game.' }));
-      } else {
-        const vals = S.letter_values || {};
-        const letters = Object.keys(vals).filter((l) => l !== '?').sort((a, b) => a.localeCompare(b));
-        if (vals['?'] !== undefined) letters.push('?');
-        const grid = h('div', { class: 'bag-grid' });
-        for (const l of letters) {
-          const n = (t.letters && t.letters[l]) || 0;
-          grid.append(h('div', { class: 'bag-tile' + (n ? '' : ' is-empty'), title: `${n} left` },
-            h('span', { class: 'bag-letter', text: l === '?' ? '' : l }),
-            h('sup', { text: String(vals[l]) }),
-            h('span', { class: 'bag-n', text: String(n) })));
-        }
-        body.append(grid);
-      }
-      body.append(h('div', { class: 'bag-total' },
-        h('span', { text: 'Tiles in bag' }), h('b', { text: String(S.bag_count) }),
-        h('small', { text: ` · ${t.total != null ? t.total : S.bag_count} unseen (bag + opponents’ racks)` })));
-    }
-    // ---------- definitions tab ----------
-    const defCache = {};
-    let defWord = null;
-    async function fetchDefinition(word, lang) {
-      const key = lang + ':' + word;
-      if (defCache[key]) return defCache[key];
-      const lower = word.toLowerCase();
-      let result = [];
-      try {
-        if (lang === 'en') {
-          const r = await fetch('https://api.dictionaryapi.dev/v2/entries/en/' + encodeURIComponent(lower));
-          if (r.ok) {
-            const data = await r.json();
-            for (const e of data) for (const m of e.meanings || []) for (const d of m.definitions || []) result.push(d.definition);
-          }
-        } else {
-          const r = await fetch(`https://${lang}.wiktionary.org/api/rest_v1/page/definition/` + encodeURIComponent(lower));
-          if (r.ok) {
-            const data = await r.json();
-            for (const entries of Object.values(data)) for (const e of entries) for (const d of e.definitions || []) {
-              const text = new DOMParser().parseFromString(d.definition, 'text/html').body.textContent.trim();
-              if (text) result.push(text);
-            }
-          }
-        }
-      } catch (err) { result = null; }
-      if (result) defCache[key] = result.slice(0, 8);
-      return result ? result.slice(0, 8) : null;
-    }
-    function renderDefs() {
-      const tab = document.querySelector('#bag-pop .bag-tab[data-tab="defs"]');
-      const body = $('bag-tab-defs');
-      if (!tab || !body) return;
-      const locked = !!S.definitions_locked;
-      tab.disabled = locked;
-      tab.title = locked ? 'Locked in challenge games until you use a challenge' : '';
-      tab.textContent = locked ? 'Definitions 🔒' : 'Definitions';
-      if (locked && !body.hidden) setBagTab('bag');
-      body.replaceChildren();
-      if (locked) return;
-      const words = S.definition_words || [];
-      if (!words.length) { body.append(h('p', { class: 'bag-hidden', text: 'No words have been played yet.' })); return; }
-      if (!defWord || !words.includes(defWord)) defWord = words[0];
-      const chips = h('div', { class: 'def-chips' });
-      for (const w of words.slice(0, 20)) {
-        chips.append(h('button', { type: 'button', class: 'def-chip' + (w === defWord ? ' is-active' : ''), text: w, onclick: () => { defWord = w; renderDefs(); } }));
-      }
-      const box = h('div', { class: 'def-box' }, h('h3', { class: 'def-title', text: defWord.toLowerCase() }), h('p', { class: 'bag-hidden', text: 'Loading…' }));
-      body.append(chips, box, h('div', { class: 'def-attr', text: 'Powered by ' + (S.language === 'en' ? 'Free Dictionary API' : 'Wiktionary') }));
-      const asked = defWord;
-      fetchDefinition(asked, S.language).then((defs) => {
-        if (asked !== defWord) return;
-        box.querySelector('p').remove();
-        if (!defs || !defs.length) { box.append(h('p', { class: 'bag-hidden', text: defs === null ? 'Could not reach the dictionary.' : 'No definition found.' })); return; }
-        box.append(h('ol', { class: 'def-list' }, ...defs.map((d) => h('li', { text: d }))));
-      });
-    }
-    function setBagTab(name) {
-      for (const tab of document.querySelectorAll('#bag-pop .bag-tab')) tab.classList.toggle('is-active', tab.dataset.tab === name);
-      $('bag-tab-bag').hidden = name !== 'bag';
-      $('bag-tab-defs').hidden = name !== 'defs';
-    }
-    function toggleBagPop(force) {
-      const pop = $('bag-pop');
-      if (!pop) return;
-      pop.hidden = force !== undefined ? !force : !pop.hidden;
-      if (!pop.hidden) { setBagTab('bag'); renderBagUi(); }
-    }
-    if ($('bag-btn')) {
-      $('bag-btn').addEventListener('click', (e) => { e.stopPropagation(); toggleBagPop(); });
-      $('bag-btn').addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleBagPop(); } });
-      for (const tab of document.querySelectorAll('#bag-pop .bag-tab')) {
-        tab.addEventListener('click', () => { if (!tab.disabled) setBagTab(tab.dataset.tab); });
-      }
-      document.addEventListener('click', (e) => { if (!e.target.closest('#bag-pop, #bag-btn')) toggleBagPop(false); });
-    }
 
     function renderSettingsButton() {
       const locked = S.status === 'finished' || S.settings_locked;
@@ -2060,6 +1954,8 @@
       }
     });
     els.shareUrl.addEventListener('focus', () => els.shareUrl.select());
+
+    if (window.App.bag) window.App.bag.initBag(() => S);
 
     // ---------- boot ----------
     // The 25x25 board is small on a phone, so start zoomed there on mobile viewports (<= 700px) unless saved otherwise.
