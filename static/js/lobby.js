@@ -48,6 +48,7 @@
         window.location.href = data.path;
       } catch (err) {
         createError.textContent = err.message || 'Could not create a game.';
+        createError.setAttribute('role', 'alert');
         createError.hidden = false;
         createBtn.disabled = false;
       }
@@ -77,7 +78,10 @@
     try { last = JSON.parse(store.get(LAST_KEY) || 'null'); } catch (_) { last = null; }
     if (last && typeof last.room === 'string' && loadSession(last.room)) {
       fetch(`/api/room/${encodeURIComponent(last.room)}`)
-        .then((res) => res.json())
+        .then((res) => {
+          if (!res.ok) throw new Error('Failed to fetch room status');
+          return res.json();
+        })
         .then((info) => {
           if (!info.exists) { clearSession(last.room); return; }
           $('rejoin-code').textContent = last.room;
@@ -88,7 +92,14 @@
             $('rejoin').hidden = true;
           });
         })
-        .catch(() => { /* offline: just don't show the banner */ });
+        .catch(() => {
+          const errorEl = $('create-error');
+          if (errorEl) {
+            errorEl.textContent = 'Could not check room status.';
+            errorEl.setAttribute('role', 'alert');
+            errorEl.hidden = false;
+          }
+        });
     }
   }
 

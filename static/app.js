@@ -154,7 +154,11 @@
       els.toast.textContent = message;
       els.toast.className = isError ? 'toast error' : 'toast';
       els.toast.setAttribute('role', isError ? 'alert' : 'status');
-      if (!isError) els.toast.setAttribute('aria-live', 'polite');
+      if (isError) {
+        els.toast.setAttribute('role', 'alert');
+      } else {
+        els.toast.setAttribute('aria-live', 'polite');
+      }
       els.toast.hidden = false;
       clearTimeout(toastTimer);
       toastTimer = setTimeout(() => { els.toast.hidden = true; }, isError ? 5000 : 3500);
@@ -1218,15 +1222,25 @@
 
     // ---------- client -> server ----------
     function act(event, payload, onOk) {
-      if (!socket || !socket.connected) { toast('Not connected to the server.', true); return; }
+      if (!socket || !socket.connected) {
+        toast('Not connected to the server.', true);
+        if (els.toast) els.toast.setAttribute('role', 'alert');
+        return;
+      }
       if (busy) return;
       busy = true;
       renderControlsSafe();
       socket.timeout(ACK_TIMEOUT).emit(event, payload, (err, res) => {
         busy = false;
-        if (err) toast('The server did not respond. Check your connection.', true);
-        else if (!res || !res.ok) toast((res && res.error) || 'Something went wrong.', true);
-        else if (onOk) onOk(res);
+        if (err) {
+          toast('The server did not respond. Check your connection.', true);
+          if (els.toast) els.toast.setAttribute('role', 'alert');
+        } else if (!res || !res.ok) {
+          toast((res && res.error) || 'Something went wrong.', true);
+          if (els.toast) els.toast.setAttribute('role', 'alert');
+        } else if (onOk) {
+          onOk(res);
+        }
         syncLocalFromServer();
         render();
       });
@@ -1235,7 +1249,11 @@
     function renderControlsSafe() { if (S && config) { renderControls(); renderSettingsButton(); } }
 
     function sendPlacements() {
-      if (!socket || !socket.connected) { toast('Not connected to the server.', true); return; }
+      if (!socket || !socket.connected) {
+        toast('Not connected to the server.', true);
+        if (els.toast) els.toast.setAttribute('role', 'alert');
+        return;
+      }
       local.inflight += 1;
       const placements = local.pending.map((p) => ({
         rack_index: p.rack_index, row: p.row, col: p.col, letter: p.letter,
@@ -1243,8 +1261,13 @@
       const event = canEdit() ? 'place_tiles' : 'stage_tiles';
       socket.timeout(ACK_TIMEOUT).emit(event, { placements }, (err, res) => {
         local.inflight = Math.max(0, local.inflight - 1);
-        if (err) toast('The server did not respond. Check your connection.', true);
-        else if (!res || !res.ok) toast((res && res.error) || 'Could not place that tile.', true);
+        if (err) {
+          toast('The server did not respond. Check your connection.', true);
+          if (els.toast) els.toast.setAttribute('role', 'alert');
+        } else if (!res || !res.ok) {
+          toast((res && res.error) || 'Could not place that tile.', true);
+          if (els.toast) els.toast.setAttribute('role', 'alert');
+        }
         syncLocalFromServer();
         render();
       });
@@ -1254,7 +1277,14 @@
       if (!socket) return;
       const payload = { room: roomCode, token: session.token || undefined, name: session.name || '' };
       socket.timeout(ACK_TIMEOUT).emit('join', payload, (err, res) => {
-        if (err) { setTimeout(doJoin, 1500); return; }
+        if (err) {
+          setTimeout(doJoin, 1500);
+          if (els.toast) {
+            toast('The server did not respond during join.', true);
+            els.toast.setAttribute('role', 'alert');
+          }
+          return;
+        }
         if (!res || !res.ok) {
           resyncPending = false;
           if (res && res.code === 'no_room') {
@@ -1266,6 +1296,7 @@
             fatalModal('Room is full', 'This game already has all of its players.');
           } else {
             toast((res && res.error) || 'Could not join the game.', true);
+            if (els.toast) els.toast.setAttribute('role', 'alert');
           }
           return;
         }
