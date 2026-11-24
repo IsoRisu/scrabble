@@ -1151,15 +1151,13 @@
         toggleBtn.textContent = isCollapsed ? `▼ Players (${totalActive})` : '▲ Hide';
       }
 
-      // DOM Node Recycling: update existing player cards or create/remove as needed
       const existingCards = Array.from(els.players.children);
       
-      // Update or create active player cards
       S.players.forEach((p, index) => {
         const active = S.status === 'playing' && S.current === p.seat;
         let card = existingCards[index];
         
-        if (!card || card.classList.contains('waiting') !== false && !card.dataset.playerSeat) {
+        if (!card || (card.classList.contains('waiting') !== false && !card.dataset.playerSeat)) {
           card = h('div', { class: 'player-card' });
           card.dataset.playerSeat = String(p.seat);
           if (existingCards[index]) {
@@ -1173,7 +1171,6 @@
         card.style.setProperty('--seat-hue', String(seatHue(p.seat)));
         card.dataset.playerSeat = String(p.seat);
 
-        // Update name part
         let nameEl = card.querySelector('.name');
         if (!nameEl) {
           nameEl = h('div', { class: 'name' },
@@ -1196,7 +1193,6 @@
           }
         }
 
-        // Update score
         let scoreEl = card.querySelector('.score');
         if (!scoreEl) {
           scoreEl = h('div', { class: 'score', text: String(p.score) });
@@ -1205,7 +1201,6 @@
           scoreEl.textContent = String(p.score);
         }
 
-        // Update racks & mini tiles
         let racksEl = card.querySelector('.racks');
         const minis = h('span', { class: 'mini-tiles' });
         for (let i = 0; i < p.rack_count; i += 1) minis.append(h('i'));
@@ -1216,7 +1211,6 @@
           racksEl.replaceChildren(minis, `${p.rack_count} tile${p.rack_count === 1 ? '' : 's'}`);
         }
 
-        // Update skippable button
         let skipBtn = card.querySelector('.btn-skip');
         if (S.skippable === p.seat) {
           if (!skipBtn) {
@@ -1232,7 +1226,6 @@
         }
       });
 
-      // Handle single placeholder slot if waiting
       let placeholderEl = existingCards[S.players.length];
       if (showPlaceholder) {
         if (!placeholderEl || !placeholderEl.classList.contains('waiting')) {
@@ -1248,7 +1241,6 @@
         }
       }
 
-      // Trim excess child nodes beyond active + placeholder
       while (els.players.children.length > totalSlots) {
         els.players.lastElementChild.remove();
       }
@@ -1549,6 +1541,93 @@
       });
     }
 
+    // Web Audio API Sound Manager with Mute Toggle
+    let soundMuted = store.get('scrabble.muted') === '1';
+    const soundManager = {
+      play(type) {
+        if (soundMuted) return;
+        try {
+          const Ctx = window.AudioContext || window.webkitAudioContext;
+          if (!Ctx) return;
+          audioCtx = audioCtx || new Ctx();
+          if (audioCtx.state === 'suspended') audioCtx.resume();
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          const now = audioCtx.currentTime;
+          if (type === 'click') {
+            osc.frequency.setValueAtTime(400, now);
+            gain.gain.setValueAtTime(0.02, now);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.05);
+            osc.start(now); osc.stop(now + 0.05);
+          } else if (type === 'chime') {
+            osc.frequency.setValueAtTime(523.25, now);
+            osc.frequency.setValueAtTime(659.25, now + 0.08);
+            osc.frequency.setValueAtTime(783.99, now + 0.16);
+            gain.gain.setValueAtTime(0.04, now);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
+            osc.start(now); osc.stop(now + 0.35);
+          } else if (type === 'buzzer') {
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(150, now);
+            gain.gain.setValueAtTime(0.05, now);
+            gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.2);
+            osc.start(now); osc.stop(now + 0.2);
+          }
+        } catch (_) {}
+      }
+    };
+
+    function setupSoundToggle() {
+      const headerActions = document.querySelector('.ll-header-actions') || document.querySelector('.header') || document.body;
+      if (!headerActions.querySelector('#btn-mute-audio')) {
+        const muteBtn = h('button', {
+          id: 'btn-mute-audio', class: 'btn btn-ghost', type: 'button',
+          title: soundMuted ? 'Unmute sounds' : 'Mute sounds',
+          text: soundMuted ? '🔇' : '🔊',
+          onclick: () => {
+            soundMuted = !soundMuted;
+            store.set('scrabble.muted', soundMuted ? '1' : '0');
+            muteBtn.textContent = soundMuted ? '🔇' : '🔊';
+            muteBtn.title = soundMuted ? 'Unmute sounds' : 'Mute sounds';
+            if (!soundMuted) soundManager.play('click');
+          }
+        });
+        headerActions.prepend(muteBtn);
+      }
+    }
+
+    function setupChatDrawer() {
+      const drawer = $('unified-drawer-secondary-section') || document.body;
+      if (!drawer.querySelector('#chat-container')) {
+        const chatBox = h('div', { id: 'chat-container', class: 'chat-container' },
+          h('h4', { text: 'In-Game Chat' }),
+          h('div', { id: 'chat-messages', class: 'chat-messages' }),
+          h('form', { id: 'chat-form', class: 'chat-form' },
+            h('input', { id: 'chat-input', type: 'text', maxlength: '200', placeholder: 'Type a message...' }),
+            h('button', { class: 'btn btn-primary', type: 'submit', text: 'Send' })
+          )
+        );
+        drawer.append(chatBox);
+        $('chat-form').addEventListener('submit', (e) => {
+          e.preventDefault();
+          const input = $('chat-input');
+          const val = input.value.trim();
+          if (!val) return;
+          input.value = '';
+          act('send_chat', { text: val }, () => { soundManager.play('click'); });
+        });
+      }
+      const chatMsgs = $('chat-messages');
+      if (chatMsgs && S && S.chat) {
+        chatMsgs.replaceChildren(...S.chat.map((m) => h('div', { class: 'chat-msg' },
+          h('b', { text: m.name + ': ' }), h('span', { text: m.text })
+        )));
+        chatMsgs.scrollTop = chatMsgs.scrollHeight;
+      }
+    }
+
     function startSocket() {
       // eslint-disable-next-line no-undef
       if (typeof io !== 'function') {
@@ -1564,9 +1643,12 @@
         local.inflight = 0;
         busy = false;
       });
-      socket.on('connect_error', () => setConn('wait', 'reconnecting…'));
-      socket.on('state', onState);
-      socket.on('state_diff', onDiff);
+      socket.on('connect_error', () => {
+        setConn('wait', 'reconnecting…');
+        soundManager.play('buzzer');
+      });
+      socket.on('state', (msg) => { setupSoundToggle(); setupChatDrawer(); soundManager.play('chime'); onState(msg); });
+      socket.on('state_diff', (msg) => { setupChatDrawer(); onDiff(msg); });
     }
 
     // ---------- local editing (rack <-> board) ----------

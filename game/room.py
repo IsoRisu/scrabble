@@ -281,6 +281,7 @@ class Room:
     def __init__(self, code, mode=DEFAULT_MODE, length=DEFAULT_LENGTH, timer=DEFAULT_TIMER, rng=None, clock=None,
                  auto_expand=None, expand_margin=DEFAULT_EXPAND_MARGIN, max_players=DEFAULT_PLAYERS,
                  language=DEFAULT_LANGUAGE, auto_check=None, show_distribution=True):
+        self.chat = []
         if mode not in MODES:
             raise GameError("Unknown game type.")
         if auto_check is not None and not isinstance(auto_check, bool):
@@ -534,6 +535,10 @@ class Room:
 
     # ---- players -----------------------------------------------------
     def add_player(self, name):
+        name = clean_name(name)
+        if not name:
+            seat = len(self.players)
+            name = f"Player {seat + 1}"
         if len(self.players) >= self.max_players:
             if self.mode == "wild" and self.max_players < MAX_PLAYERS:
                 new_max = min(MAX_PLAYERS, self.max_players + 1)
@@ -547,11 +552,21 @@ class Room:
                     raise GameError("This room is full.")
             else:
                 raise GameError("This room is full.")
+        
+        # Verify token uniqueness or enforce bounds
+        token = secrets.token_urlsafe(18)
+        while any(p.token == token for p in self.players):
+            token = secrets.token_urlsafe(18)
+
         seat = len(self.players)
-        name = clean_name(name) or f"Player {seat + 1}"
-        if any(p.name.lower() == name.lower() for p in self.players):
-            name = f"{name[: MAX_NAME_LENGTH - 2]} 2"
-        player = Player(token=secrets.token_urlsafe(18), name=name, seat=seat)
+        base_name = name
+        counter = 2
+        while any(p.name.lower() == name.lower() for p in self.players):
+            suffix = f" {counter}"
+            name = f"{base_name[:MAX_NAME_LENGTH - len(suffix)]}{suffix}"
+            counter += 1
+
+        player = Player(token=token, name=name, seat=seat)
         self.players.append(player)
         return player
 
@@ -1034,7 +1049,7 @@ class Room:
                 self._advance_final_round(player)
         return {"score": score.total, "words": texts, "bingo": score.bingo, "bingo_bonus": score.bonus}
 
-    def pass_turn(self, player):
+    def pass_turn(self, player, data=None):
         self._require_turn(player)
         self._clear_pending(player)
         self.turns_played += 1
@@ -1045,6 +1060,19 @@ class Room:
         self._log("pass", f"{player.name} passed.", seat=player.seat)
         self._end_turn_scoreless(player)
         return {}
+
+    def send_chat(self, player, text):
+        if not isinstance(text, str) or not text.strip():
+            raise GameError("Chat message cannot be empty.")
+        clean = "".join(ch for ch in text if ch.isprintable()).strip()[:200]
+        if not clean:
+            raise GameError("Invalid chat message.")
+        entry = {"seat": player.seat, "name": player.name, "text": clean, "time": time.time()}
+        self.chat.append(entry)
+        if len(self.chat) > 100:
+            self.chat.pop(0)
+        self._log("chat", f"{player.name}: {clean}", seat=player.seat)
+        return {"chat": entry}
 
     def swap(self, player, indices):
         """Exchange the tiles at the given rack indices with the bag."""
@@ -1358,6 +1386,7 @@ class Room:
             "can_challenge": can_challenge,
             "awaiting_final": self.awaiting_final,
             "history": list(self.history),
+            "chat": list(self.chat),
             "winner": self.winner,
             "final": self.final,
         }
@@ -1411,7 +1440,16 @@ class RoomRegistry:
             return list(self._rooms.values())
 
     def get(self, code):
-        return self._rooms.get(self.normalize(code))
+        norm = self.normalize(code)
+        if not norm:
+            return None
+        room = self._rooms.get(norm)
+        if room is None:
+            # Fallback direct/case-insensitive lookup if needed
+            for k, r in self._rooms.items():
+                if k.upper() == norm.upper() or getattr(r, "code", "").upper() == norm.upper():
+                    return r
+        return room
 
     def purge(self):
         with self._lock:

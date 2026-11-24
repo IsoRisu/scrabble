@@ -65,7 +65,7 @@ WILD_PREMIUM = {
 # The premium pattern repeats every PERIOD squares in both directions (the classic
 # 15x15 pattern shares its outer rows/columns), so the board can grow forever and
 # new squares still get bonuses.  Python's modulo handles negative coordinates.
-PERIOD = 14
+PERIOD = 15
 
 
 def premium_at(row, col, mode="classic"):

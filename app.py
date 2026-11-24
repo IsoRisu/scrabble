@@ -417,7 +417,7 @@ def on_submit_word(room, player, data):
 
 @game_action("pass")
 def on_pass(room, player, data):
-    return room.pass_turn(player)
+    return room.pass_turn(player, data)
 
 
 @game_action("swap_tiles")
@@ -433,6 +433,13 @@ def on_challenge_skip(room, player, data):
     A failed challenge costs the challenger their turn - hence "skip".
     """
     return room.challenge(player)
+
+
+@game_action("send_chat")
+def on_send_chat(room, player, data):
+    """Send a real-time chat message in the room."""
+    text = data.get("text") if isinstance(data.get("text"), str) else ""
+    return room.send_chat(player, text)
 
 
 if __name__ == "__main__":

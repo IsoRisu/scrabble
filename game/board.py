@@ -98,8 +98,10 @@ class Board:
         """
         if not self.grid:
             return False
-        rows = [r for r, _ in self.grid]
-        cols = [c for _, c in self.grid]
+        rows = [r for r, _ in self.grid if isinstance(r, int)]
+        cols = [c for _, c in self.grid if isinstance(c, int)]
+        if not rows or not cols:
+            return False
         new = (
             min(self.top, min(rows) - margin),
             min(self.left, min(cols) - margin),
