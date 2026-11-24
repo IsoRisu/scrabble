@@ -8,6 +8,8 @@ Run locally:   python app.py
 Production:    gunicorn -c gunicorn.conf.py -k eventlet -w 1 app:app
 """
 import os
+import time
+from collections import defaultdict
 
 # eventlet must be monkey-patched before anything else is imported.  If it is
 # not installed we fall back to Flask-SocketIO's threading mode so that
@@ -69,6 +71,24 @@ REGISTRY = RoomRegistry()
 # socket id -> (room code, player token).  A player's token survives
 # reconnects; the socket id does not.
 SESSIONS = {}
+
+# socket id -> list of recent event timestamps for rate limiting
+_RATE_LIMIT_TIMERS = defaultdict(list)
+RATE_LIMIT_MAX_EVENTS = 20
+RATE_LIMIT_WINDOW_SECONDS = 1.0
+
+
+def check_rate_limit(sid):
+    """Return True if the socket sid has sent too many events recently."""
+    now = time.time()
+    timestamps = _RATE_LIMIT_TIMERS[sid]
+    # Prune timestamps outside the 1-second window
+    while timestamps and now - timestamps[0] > RATE_LIMIT_WINDOW_SECONDS:
+        timestamps.pop(0)
+    if len(timestamps) >= RATE_LIMIT_MAX_EVENTS:
+        return True
+    timestamps.append(now)
+    return False
 
 
 # --------------------------------------------------------------------------
@@ -244,6 +264,8 @@ def ensure_clock():
 @socketio.on("join")
 def on_join(data=None):
     """Join a room, or rejoin it with a saved session token after a reconnect."""
+    if check_rate_limit(request.sid):
+        return {"ok": False, "error": "Too many requests"}
     ensure_clock()
     data = data if isinstance(data, dict) else {}
     room = REGISTRY.get(data.get("room"))
@@ -271,6 +293,7 @@ def on_join(data=None):
 
 @socketio.on("disconnect")
 def on_disconnect(*_args):
+    _RATE_LIMIT_TIMERS.pop(request.sid, None)
     info = SESSIONS.pop(request.sid, None)
     if info is None:
         return
@@ -299,6 +322,8 @@ def game_action(event):
     def decorator(fn):
         @wraps(fn)
         def handler(data=None):
+            if check_rate_limit(request.sid):
+                return {"ok": False, "error": "Too many requests"}
             info = SESSIONS.get(request.sid)
             room = REGISTRY.get(info[0]) if info else None
             if room is None:
@@ -532,6 +557,6 @@ if __name__ == "__main__":
 #       let the room creator choose it.
 # TODO: Automatic forfeits for abandoned games (turn timers already pass for you).
 # TODO: Rematch button, spectators, and a downloadable move log (GCG format).
-# TODO: Rate-limit socket events and room creation per IP.
+# TODO: Rate-limit room creation per IP.
 # TODO: Serve socket.io-client from /static instead of the CDN for offline use.
 # TODO: Frontend tests (Playwright) and a Socket.IO integration test suite.
