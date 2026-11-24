@@ -117,7 +117,7 @@
     function openZoomPopover() {
       if (zPop) { closeZoomPopover(); return; }
       const label = window.App.util.h('span', { class: 'zp-label' });
-      const ball = window.App.util.h('div', { class: 'zp-ball', role: 'slider', tabindex: '0', 'aria-label': 'Board zoom',
+      const ball = window.App.util.h('div', { class: 'zp-ball', role: 'slider', tabindex: '0', 'aria-label': 'Board zoom slider',
         'aria-valuemin': String(ZMIN), 'aria-valuemax': String(ZMAX) }, [label]);
       const track = window.App.util.h('div', { class: 'zp-track' }, [ball]);
       const fit = window.App.util.h('button', { class: 'btn btn-small', type: 'button', text: 'Fit board' });

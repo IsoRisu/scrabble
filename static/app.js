@@ -1717,6 +1717,9 @@
     const drawerToggleBtn = $('btn-toggle-drawer');
     const bottomSheetEl = document.querySelector('.ll-bottom');
     if (drawerToggleBtn && bottomSheetEl) {
+      if (!drawerToggleBtn.hasAttribute('aria-label')) {
+        drawerToggleBtn.setAttribute('aria-label', 'Toggle drawer');
+      }
       drawerToggleBtn.addEventListener('click', () => {
         bottomSheetEl.classList.toggle('collapsed-drawer');
         const isCollapsed = bottomSheetEl.classList.contains('collapsed-drawer');
