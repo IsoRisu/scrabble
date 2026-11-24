@@ -90,6 +90,11 @@
     </section>
 
     <section class="card">
+      <h2>Rules & Help</h2>
+      <button id="btn-rules" class="btn" type="button">Rules</button>
+    </section>
+
+    <section class="card">
       <h2>Join a game</h2>
       <form id="join-form" class="row">
         <label for="join-code" class="sr-only" style="display:none">Room code</label>
@@ -102,6 +107,37 @@
   </main>
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js" crossorigin="anonymous" onerror="this.outerHTML='&lt;div class=&quot;banner banner-error&quot; role=&quot;alert&quot;&gt;Cannot reach the game server library. Check your connection and reload.&lt;/div&gt;'"></script>
   <script src="{{ url_for('static', filename='js/util.js') }}"></script>
+  <dialog id="rules-modal" class="modal">
+    <div class="modal-content">
+      <h2>How to play</h2>
+      <p>Place tiles on the board to form valid words. Words must read left-to-right or top-to-bottom and connect with existing words.</p>
+      <div class="modal-actions">
+        <button id="btn-close-rules" class="btn" type="button">Close</button>
+      </div>
+    </div>
+  </dialog>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js" crossorigin="anonymous" onerror="this.outerHTML='&lt;div class=&quot;banner banner-error&quot; role=&quot;alert&quot;&gt;Cannot reach the game server library. Check your connection and reload.&lt;/div&gt;'"></script>
+  <script src="{{ url_for('static', filename='js/util.js') }}"></script>
   <script src="{{ url_for('static', filename='js/lobby.js') }}"></script>
+  <script>
+    const rulesBtn = document.getElementById('btn-rules');
+    if (rulesBtn) {
+      rulesBtn.addEventListener('click', function() {
+        const modal = document.getElementById('rules-modal');
+        if (modal && typeof modal.showModal === 'function') {
+          modal.showModal();
+        }
+      });
+    }
+    const closeRulesBtn = document.getElementById('btn-close-rules');
+    if (closeRulesBtn) {
+      closeRulesBtn.addEventListener('click', function() {
+        const modal = document.getElementById('rules-modal');
+        if (modal) {
+          modal.close();
+        }
+      });
+    }
+  </script>
 </body>
 </html>
