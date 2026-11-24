@@ -51,13 +51,17 @@ def _cors_origins():
     return [o.strip() for o in raw.split(",") if o.strip()]
 
 
+# Socket.IO connection tuning constants
+SOCKET_PING_INTERVAL_SECONDS = 20
+SOCKET_PING_TIMEOUT_SECONDS = 30
+
 socketio = SocketIO(
     app,
     async_mode=ASYNC_MODE,
     cors_allowed_origins=_cors_origins(),
     max_http_buffer_size=64 * 1024,  # clients only ever send tiny JSON messages
-    ping_interval=20,
-    ping_timeout=30,
+    ping_interval=SOCKET_PING_INTERVAL_SECONDS,
+    ping_timeout=SOCKET_PING_TIMEOUT_SECONDS,
 )
 
 REGISTRY = RoomRegistry()
@@ -209,10 +213,14 @@ def push_all(room):
 _clock_started = False
 
 
+# Turn clock background loop interval in seconds
+CLOCK_LOOP_INTERVAL_SECONDS = 1
+
+
 def _clock_loop():
     """Once a second, pass for any Classic player whose turn timer has run out (Wild timers only remind)."""
     while True:
-        socketio.sleep(1)
+        socketio.sleep(CLOCK_LOOP_INTERVAL_SECONDS)
         for room in REGISTRY.rooms():
             try:
                 with room.lock:
@@ -435,10 +443,14 @@ def on_challenge_skip(room, player, data):
     return room.challenge(player)
 
 
+# Default server binding port if not specified via environment variable
+DEFAULT_SERVER_PORT = 5000
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     host = os.environ.get("HOST", "127.0.0.1")
-    port = int(os.environ.get("PORT", "5000"))
+    port = int(os.environ.get("PORT", str(DEFAULT_SERVER_PORT)))
     extra = {"allow_unsafe_werkzeug": True} if ASYNC_MODE == "threading" else {}
     print(f"Scrabble server ({ASYNC_MODE} mode) on http://{host}:{port}")
     socketio.run(app, host=host, port=port, debug=os.environ.get("FLASK_DEBUG") == "1", **extra)
