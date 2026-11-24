@@ -101,16 +101,50 @@ App.bag = (() => {
     if (defsTab) defsTab.hidden = name !== 'defs';
   }
 
-  function toggleBagPop(S, force) {
+  let bagOpener = null;
+  let bagTrapRemove = null;
+
+  function toggleBagPop(S, force, opener = null) {
     const pop = $('bag-pop');
     if (!pop) return;
-    pop.hidden = force !== undefined ? !force : !pop.hidden;
-    if (!pop.hidden && S) { setBagTab('bag'); renderBagUi(S); }
+    const willShow = force !== undefined ? force : pop.hidden;
+    pop.hidden = !willShow;
+    if (willShow) {
+      if (opener) bagOpener = opener;
+      if (S) { setBagTab('bag'); renderBagUi(S); }
+      const firstTab = pop.querySelector('.bag-tab');
+      if (firstTab && typeof firstTab.focus === 'function') firstTab.focus();
+      if (window.App.util && window.App.util.trapFocus) {
+        bagTrapRemove = window.App.util.trapFocus(pop, () => toggleBagPop(null, false));
+      }
+      const onDocKey = (e) => {
+        if (e.key === 'Escape') {
+          toggleBagPop(null, false);
+          document.removeEventListener('keydown', onDocKey);
+        }
+      };
+      document.addEventListener('keydown', onDocKey);
+    } else {
+      if (bagTrapRemove) {
+        bagTrapRemove();
+        bagTrapRemove = null;
+      }
+      if (bagOpener && typeof bagOpener.focus === 'function') {
+        try { bagOpener.focus(); } catch (_) {}
+        bagOpener = null;
+      }
+    }
   }
 
   function initBag(getState) {
-    if ($('bag-btn')) {
-      $('bag-btn').addEventListener('click', (e) => { e.stopPropagation(); toggleBagPop(getState()); });
+    const bagBtn = $('bag-btn');
+    if (bagBtn) {
+      bagBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const pop = $('bag-pop');
+        const isHidden = !pop || pop.hidden;
+        toggleBagPop(getState(), isHidden, bagBtn);
+      });
       for (const tab of document.querySelectorAll('#bag-pop .bag-tab')) {
         tab.addEventListener('click', () => { if (!tab.disabled) setBagTab(tab.dataset.tab); });
       }

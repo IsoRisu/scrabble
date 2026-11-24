@@ -43,19 +43,24 @@
 
   function stopConfetti() { if (confetti) cancelAnimationFrame(confetti.raf); confetti = null; }
 
+  let victoryTrapRemove = null;
+  let victoryOpener = null;
+
   function renderVictory(S, actFn, makeTileFn) {
     const root = $('victory');
     const reopen = $('victory-reopen');
     if (!S || S.status !== 'finished') {
+      if (victoryTrapRemove) { victoryTrapRemove(); victoryTrapRemove = null; }
       if (root) root.remove();
       if (reopen) reopen.remove();
       stopConfetti(); victoryHidden = false;
       return;
     }
     if (victoryHidden) {
+      if (victoryTrapRemove) { victoryTrapRemove(); victoryTrapRemove = null; }
       if (root) root.hidden = true;
       stopConfetti();
-      if (!reopen) document.body.append(h('button', { id: 'victory-reopen', class: 'vic-reopen', type: 'button', text: 'Results', onclick: () => { victoryHidden = false; renderVictory(S, actFn, makeTileFn); } }));
+      if (!reopen) document.body.append(h('button', { id: 'victory-reopen', class: 'vic-reopen', type: 'button', text: 'Results', onclick: () => { victoryOpener = document.activeElement; victoryHidden = false; renderVictory(S, actFn, makeTileFn); } }));
       return;
     }
     if (reopen) reopen.remove();
@@ -86,8 +91,16 @@
         h('div', { class: 'vic-stat-who' }, h('b', { text: label }), h('span', { text: entry.name })),
         h('div', { class: 'vic-stat-pts' }, h('b', { text: String(pts) }), h('span', { text: 'pts' }))),
       wordTiles(word, makeTileFn));
+    const closeVic = () => {
+      victoryHidden = true;
+      if (victoryTrapRemove) { victoryTrapRemove(); victoryTrapRemove = null; }
+      renderVictory(S, actFn, makeTileFn);
+      if (victoryOpener && typeof victoryOpener.focus === 'function') {
+        try { victoryOpener.focus(); } catch (_) {}
+      }
+    };
     const board = h('div', { class: 'vic-col vic-board' },
-      h('button', { class: 'vic-close', type: 'button', 'aria-label': 'Close results', text: '×', onclick: () => { victoryHidden = true; renderVictory(S, actFn, makeTileFn); } }),
+      h('button', { class: 'vic-close', type: 'button', 'aria-label': 'Close results', text: '×', onclick: closeVic }),
       h('button', { class: 'vic-next', type: 'button', text: 'Start next game', onclick: () => actFn('new_game', {}) }));
     const lead = h('div', { class: 'vic-col vic-leaders' }, h('h2', { text: 'Players' }),
       ...rows.map(({ p, rank: rk }) => h('div', { class: 'vic-row' + (p.seat === S.you ? ' me' : '') },
@@ -105,11 +118,16 @@
           h('div', { class: 'vic-who' }, h('b', { text: me.p.name }), h('span', { text: `${me.p.score} points` })))));
     const canvas = h('canvas', { class: 'vic-confetti' });
     const next = h('button', { class: 'vic-next vic-next-mobile', type: 'button', text: 'Start next game', onclick: () => actFn('new_game', {}) });
-    const fresh = h('div', { id: 'victory', class: 'victory' }, canvas, board, lead, right, next);
+    const fresh = h('div', { id: 'victory', class: 'victory', role: 'dialog', 'aria-modal': 'true' }, canvas, board, lead, right, next);
     fresh.dataset.sig = vsig;
     if (root) root.replaceWith(fresh); else document.body.append(fresh);
     stopConfetti();
     startConfetti(canvas);
+    if (!root || root.hidden) victoryOpener = document.activeElement;
+    if (victoryTrapRemove) victoryTrapRemove();
+    if (window.App.util && window.App.util.trapFocus) {
+      victoryTrapRemove = window.App.util.trapFocus(fresh, closeVic);
+    }
   }
 
   window.App = window.App || {};
