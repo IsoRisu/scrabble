@@ -3,12 +3,19 @@ App.bag = (() => {
   const { $, h } = App.util;
 
   // ---------- tile bag badge + popover (TILE BAG / DEFINITIONS tabs) ----------
+  let lastBagStateSig = null;
+
   function renderBagUi(S) {
     const badge = $('bag-badge');
     if (badge) badge.textContent = String(S.bag_count);
     renderDefs(S);
     const pop = $('bag-pop');
     if (!pop || pop.hidden) return;
+
+    const bagSig = JSON.stringify([S.bag_count, S.show_distribution, S.tiles, S.letter_values]);
+    if (lastBagStateSig === bagSig) return;
+    lastBagStateSig = bagSig;
+
     const t = S.tiles || {};
     const body = $('bag-tab-bag');
     if (!body) return;
