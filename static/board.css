@@ -15,6 +15,12 @@
   background: var(--b-line); border-radius: 0; box-shadow: none;
   outline: var(--b-gap) solid var(--b-line);
 }
+@media (max-height: 640px) {
+  .ll-stage .board { width: min(90vw, calc((100vh - 7rem) * var(--cols) / var(--rows))); }
+}
+@media (width: 1024px) and (height: 600px), (max-width: 1024px) and (max-height: 600px) {
+  .ll-stage .board { width: min(88vw, calc((100vh - 6rem) * var(--cols) / var(--rows))); }
+}
 .ll-stage .board .cell {
   border-radius: 0; background: var(--b-cell);
   font-family: "Barlow Condensed", "Nunito", ui-rounded, "Segoe UI", system-ui, sans-serif;
