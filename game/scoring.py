@@ -47,7 +47,7 @@ _WILD_HALF = [
 ]
 
 
-def _wild_row(r):
+def _wild_row(r: int) -> dict[str, list[int]]:
     r = r if r <= 12 else 24 - r
     return _WILD_HALF[r if r <= 6 else 12 - r]
 
@@ -68,7 +68,7 @@ WILD_PREMIUM = {
 PERIOD = 14
 
 
-def premium_at(row, col, mode="classic"):
+def premium_at(row: int, col: int, mode: str = "classic") -> str | None:
     """"TW" | "DW" | "TL" | "DL" for any square on the (unbounded) board, or None.
 
     `mode` picks the layout: "classic" (standard 15x15) or "wild" (25x25 matrix).
@@ -78,12 +78,12 @@ def premium_at(row, col, mode="classic"):
     return PREMIUM.get((row % PERIOD, col % PERIOD))
 
 
-def letter_boost(row, col, mode="classic"):
+def letter_boost(row: int, col: int, mode: str = "classic") -> int:
     """The letter multiplier a tile earns by landing on (row, col): 2, 3 or 1."""
     return {"DL": 2, "TL": 3}.get(premium_at(row, col, mode), 1)
 
 
-def word_factor(word, mode="classic"):
+def word_factor(word, mode: str = "classic") -> int:
     """The word multiplier earned by the new tiles of `word` (DW = 2, TW = 3, stacking)."""
     factor = 1
     for cell in word.cells:
@@ -104,7 +104,7 @@ class MoveScore:
     bonus: int = 0  # what the bingo added on top of the word scores
 
 
-def score_word(word, lang="en", mode="classic"):
+def score_word(word, lang: str = "en", mode: str = "classic") -> int:
     """Score one word. Premium squares only apply to tiles placed this turn.
 
     Tiles already on the board count at their face value times the boost they
@@ -124,7 +124,7 @@ def score_word(word, lang="en", mode="classic"):
     return letters * word_factor(word, mode)
 
 
-def score_move(words, tiles_placed, lang="en", mode="classic"):
+def score_move(words, tiles_placed: int, lang: str = "en", mode: str = "classic") -> MoveScore:
     """Total score for a play: every word formed plus the bingo bonus.
 
     Using all seven tiles is a bingo.  Classic scoring adds a flat 50 points.  Wild
