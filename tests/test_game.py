@@ -1759,3 +1759,28 @@ class WordCheckOptionTests(unittest.TestCase):
             self.assertEqual(room.auto_check, flip)
             room.update_settings(host, auto_check=not flip)
             self.assertEqual(room.rules, "challenge" if flip else "strict")
+class RestartTests(unittest.TestCase):
+    def test_restart_resets_board_scores_racks_and_turns(self):
+        room, a, b = make_room()
+        mover = room.players[room.current]
+        give(mover, list("CATSEEE"))
+        move(room, mover, "CAT", 7, 6)
+        self.assertFalse(room.board.is_empty())
+        self.assertGreater(mover.score, 0)
+        self.assertGreater(room.turns_played, 0)
+
+        room.restart(a)
+        self.assertTrue(room.board.is_empty())
+        self.assertEqual(a.score, 0)
+        self.assertEqual(b.score, 0)
+        self.assertEqual(len(a.rack), 7)
+        self.assertEqual(len(b.rack), 7)
+        self.assertEqual(room.turns_played, 0)
+        self.assertEqual(room.status, "playing")
+
+    def test_restart_rejected_while_waiting(self):
+        set_words(WORDS)
+        room = Room("WAITING", rng=random.Random(1))
+        a = room.add_player("Alice")
+        with self.assertRaisesRegex(GameError, "not started"):
+            room.restart(a)
