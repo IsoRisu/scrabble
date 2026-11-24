@@ -96,10 +96,11 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
   outline: 3px solid var(--hl);
   outline-offset: 2px;
 }
-.btn-primary { background: var(--black); border-color: #000; color: #fff; letter-spacing: .02em; }
+.btn-primary { background: #200d05; border-color: #000; color: #fff; letter-spacing: .02em; }
 .btn-primary:hover:not(:disabled) { background: #36363c; }
-.btn-danger { background: var(--danger); border-color: #a82e1d; color: #fff; }
+.btn-danger { background: #b52b16; border-color: #72190c; color: #fff; }
 .btn-danger:hover:not(:disabled) { background: #b8341f; }
+>
 .btn-link { background: transparent; border-color: transparent; color: inherit; text-decoration: underline; padding: 6px 8px; }
 .btn-wide { width: 100%; }
 
@@ -843,9 +844,10 @@ button, .btn, .icon-btn, select, input[type="text"], .tile, .cell.can-drop {
   border-color: #72190c;
 }
 
-.modal p, .hint, .form-error, .modal-info li, .bottom-sheet-status {
-  color: var(--high-contrast-muted);
+.modal p, .hint, .form-error, .modal-info li, .bottom-sheet-status, .tagline, .field span, .bag, .history-wrap h3, .vic-who span {
+  color: #623624;
 }
+>
 
 /* Base styles for the new collapsible drawer and contextual action bar */
 /* ==========================================================================
