@@ -43,6 +43,16 @@ class AppSmokeTests(unittest.TestCase):
     def test_unknown_room(self):
         self.assertFalse(self.client.get("/api/room/ZZZZZZZZ").get_json()["exists"])
 
+    def test_rate_limiter_helper(self):
+        sid = "test_sid_123"
+        # Clear any existing state for sid
+        app_module._RATE_LIMIT_TIMERS.pop(sid, None)
+        for _ in range(20):
+            self.assertFalse(app_module.check_rate_limit(sid))
+        # 21st event in the same moment should be rate-limited
+        self.assertTrue(app_module.check_rate_limit(sid))
+        app_module._RATE_LIMIT_TIMERS.pop(sid, None)
+
 
 if __name__ == "__main__":
     unittest.main()
