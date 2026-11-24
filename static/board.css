@@ -73,3 +73,9 @@ body[data-page="game"], body[data-page="game"] button { font-family: "Barlow Con
 @media (prefers-reduced-motion: reduce) {
   .board, .board-scroll, .cell, .tile { transition: none !important; scroll-behavior: auto !important; }
 }
+@media (pointer: coarse) {
+  .ll-stage button, .ll-stage .btn {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
