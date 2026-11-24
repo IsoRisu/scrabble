@@ -377,4 +377,10 @@ body .ll-bubble.bottom-sheet-status { display: block; position: relative; left: 
     height: 44px;
     padding: 0;
   }
+}@media (max-height: 500px) and (orientation: landscape) {
+  .ll-mascot-wrap { display: none !important; }
+  .ll-topbar { transform: translateX(-50%) scale(0.8); margin-top: -0.5rem; }
+  .ll-rack-area .rack { --rack-tile: 2.5rem; padding: .2rem .3rem; }
+  .ll-stage .board { width: min(85vw, calc((100vh - 9rem) * var(--cols) / var(--rows))); }
 }
+>
