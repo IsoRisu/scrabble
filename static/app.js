@@ -40,81 +40,6 @@
   }
 
   // ------------------------------------------------------------------
-  // Index page
-  // ------------------------------------------------------------------
-  function initIndex() {
-    const createBtn = $('create-btn');
-    const createError = $('create-error');
-    const createForm = $('create-form');
-
-    const handleCreate = async (event) => {
-      if (event) event.preventDefault();
-      createBtn.disabled = true;
-      createError.hidden = true;
-      const mode = $('create-mode') ? $('create-mode').value : 'wild';
-      const length = $('create-length') ? $('create-length').value : 'medium';
-      const timer = $('create-timer') ? $('create-timer').value : 'off';
-      const language = $('create-language') ? $('create-language').value : 'en';
-      const auto_check = $('create-autocheck') ? $('create-autocheck').checked : true;
-      const show_distribution = $('create-showdist') ? $('create-showdist').checked : true;
-      try {
-        const res = await fetch('/create', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mode, length, timer, language, auto_check, show_distribution }),
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || 'Could not create a game.');
-        window.location.href = data.path;
-      } catch (err) {
-        createError.textContent = err.message || 'Could not create a game.';
-        createError.hidden = false;
-        createBtn.disabled = false;
-      }
-    };
-
-    if (createForm) {
-      createForm.addEventListener('submit', handleCreate);
-    } else {
-      createBtn.addEventListener('click', handleCreate);
-    }
-
-    $('join-form').addEventListener('submit', (event) => {
-      event.preventDefault();
-      const raw = $('join-code').value.trim();
-      // Accept either a bare code or a pasted /join/CODE link.
-      const fromLink = raw.match(/\/join\/([A-Za-z0-9]+)/);
-      const code = (fromLink ? fromLink[1] : raw).toUpperCase().replace(/[^A-Z0-9]/g, '');
-      const error = $('join-error');
-      if (code.length !== 8) {
-        error.textContent = 'Room codes are 8 characters long.';
-        error.hidden = false;
-        return;
-      }
-      window.location.href = `/join/${code}`;
-    });
-
-    // "If localStorage has a session token, rejoin the room."
-    let last = null;
-    try { last = JSON.parse(store.get(LAST_KEY) || 'null'); } catch (_) { last = null; }
-    if (last && typeof last.room === 'string' && loadSession(last.room)) {
-      fetch(`/api/room/${encodeURIComponent(last.room)}`)
-        .then((res) => res.json())
-        .then((info) => {
-          if (!info.exists) { clearSession(last.room); return; }
-          $('rejoin-code').textContent = last.room;
-          $('rejoin-link').href = `/join/${last.room}`;
-          $('rejoin').hidden = false;
-          $('rejoin-forget').addEventListener('click', () => {
-            clearSession(last.room);
-            $('rejoin').hidden = true;
-          });
-        })
-        .catch(() => { /* offline: just don't show the banner */ });
-    }
-  }
-
-  // ------------------------------------------------------------------
   // Game page
   // ------------------------------------------------------------------
   function initGame() {
@@ -1976,7 +1901,6 @@
 
   // ------------------------------------------------------------------
   if (document.body.dataset.page === 'game') initGame();
-  else initIndex();
 })();
 
 // Fixed viewport: never let the page itself scroll or browser-zoom with the wheel.
