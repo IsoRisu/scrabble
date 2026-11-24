@@ -46,8 +46,8 @@
         <div class="ll-turn-row">
           <button id="btn-pass" class="ll-pass" type="button" disabled title="Pass turn">Pass turn</button>
           <span class="ll-turn-nav"><button id="turn-prev" class="ll-nav-btn" type="button" aria-label="Previous turn" title="Previous turn">&#9198;</button><b id="turn-number">Turn 1</b><button id="turn-next" class="ll-nav-btn" type="button" aria-label="Next turn" title="Next turn">&#9197;</button></span>
-          <div id="turn-review" class="turn-review" hidden></div>
         </div>
+        <div id="turn-review" class="turn-review" role="status" aria-live="polite" hidden></div>
       </div>
       <div id="turn-banner" class="turn-banner ll-turn" role="status" aria-live="polite">Connecting&hellip;</div>
     </header>
@@ -126,7 +126,7 @@
           </div>
           <button id="bag-btn" class="ll-mascot" type="button" aria-label="Tile bag"><span aria-hidden="true"></span><span aria-hidden="true"></span><span id="bag-badge" class="bag-badge">&ndash;</span></button>
         </div>
-        <div id="bottom-sheet-status-text" class="ll-bubble bottom-sheet-status">Your rack appears when the game starts</div>
+        <div id="bottom-sheet-status-text" class="ll-bubble bottom-sheet-status is-long">Your rack appears when the game starts</div>
       </div>
       <div class="ll-rack-area">
         <div id="preview" class="preview ll-preview" aria-live="polite"></div>

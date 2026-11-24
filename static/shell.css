@@ -186,7 +186,10 @@ body .ll-menu[hidden] { display: none; }
   border-left: 0; border-width: .5rem .7rem .5rem 0;
 }
 /* the old status styles hid/moved this element; neutralise them */
-body .ll-bubble.bottom-sheet-status { display: block; position: relative; left: auto; right: auto; bottom: auto; transform: none; width: auto; text-align: left; }
+body .ll-bubble.bottom-sheet-status { display: block; position: relative; left: auto; right: auto; bottom: auto; transform: none; width: auto; text-align: left;
+  white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
+/* long sentences wrap onto several lines at a smaller size instead of being cut off */
+body .ll-bubble.bottom-sheet-status.is-long { font-size: 1.05rem; line-height: 1.15; max-width: 19rem; }
 
 .ll-rack-area { pointer-events: auto; display: flex; flex-direction: column; align-items: stretch; width: min(32rem, 90vw); }
 .ll-preview { margin: 0 0 .3rem; min-height: 1.3rem; font-size: .95rem; color: #5a3320; text-align: center; }
@@ -281,7 +284,9 @@ body .ll-bubble.bottom-sheet-status { display: block; position: relative; left: 
 /* ---- turn history arrows + review overlay ---- */
 .ll-nav-btn { background: none; border: 0; color: #fff; font-size: 1rem; cursor: pointer; padding: 0 .35rem; }
 .ll-nav-btn:disabled { opacity: .35; cursor: default; }
-.turn-review { position: fixed; top: 7.2rem; left: 50%; transform: translateX(-50%); background: #4a2416; color: #fff; padding: .55rem 1.2rem; border-radius: 99px; font-size: 1.05rem; z-index: 30; box-shadow: 0 .3rem 1rem rgba(0,0,0,.3); pointer-events: none; white-space: nowrap; }
+.turn-review { position: static; transform: none; background: rgba(0, 0, 0, .78); color: #fff; border-top: 1px solid rgba(255, 255, 255, .15);
+  padding: .3rem .9rem .4rem; text-align: center; font-size: .95rem; font-weight: 800; line-height: 1.15; overflow-wrap: anywhere; pointer-events: none; }
+.turn-review[hidden] { display: none; }
 .turn-review b { text-transform: uppercase; margin-right: .3rem; }
 
 /* ---- word play banner ---- */

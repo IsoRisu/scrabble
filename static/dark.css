@@ -83,7 +83,6 @@
 :root[data-theme="dark"] .bag-tab.is-active { background: #7c4fd6; color: #fff; }
 :root[data-theme="dark"] .def-chip { background: #3a2a20; color: #fce8df; }
 :root[data-theme="dark"] .def-chip.is-active { background: var(--color-orange-light); color: #fff; }
-:root[data-theme="dark"] .turn-review { background: #5c3a29; }
 
 /* ---- board squares (light text on dark premium squares) ---- */
 :root[data-theme="dark"] .ll-stage .board .cell.dl { color: #bfe9ff; }
@@ -182,7 +181,6 @@
   :root:not([data-theme="light"]) .bag-tab.is-active { background: #7c4fd6; color: #fff; }
   :root:not([data-theme="light"]) .def-chip { background: #3a2a20; color: #fce8df; }
   :root:not([data-theme="light"]) .def-chip.is-active { background: var(--color-orange-light); color: #fff; }
-  :root:not([data-theme="light"]) .turn-review { background: #5c3a29; }
 
   /* ---- board squares (light text on dark premium squares) ---- */
   :root:not([data-theme="light"]) .ll-stage .board .cell.dl { color: #bfe9ff; }

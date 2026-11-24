@@ -142,7 +142,7 @@
     // Off-turn players can stage (prepare) a word; it is private and loads into the real
     // tentative placement when their turn starts. Both modes share the same placing UI.
     const canStage = () => isPlaying() && !myTurn() && S.rack.length > 0 && !(S.players[S.you] && S.players[S.you].resigned);
-    const canPlace = () => (canEdit() || canStage()) && reviewIdx === null;
+    const canPlace = () => canEdit() || canStage();
     const opponent = () => (S ? S.players.find((p) => p.seat !== S.you) || null : null);
     const tileValue = (letter) => {
       const values = config && config.values ? config.values[(S && S.language) || config.default_language] : null;
@@ -687,16 +687,21 @@
       const tn = $('turn-number');
       if (tn) tn.textContent = `Turn ${(S.history ? S.history.filter((e) => e.kind !== 'system').length : 0) + 1}`;
       const bub = $('bottom-sheet-status-text');
-      if (bub && S.status !== 'waiting') bub.textContent = myTurn() ? "It's your turn!" : text;
+      if (bub && S.status !== 'waiting') {
+        bub.textContent = myTurn() ? "It's your turn!" : text;
+        bub.classList.toggle('is-long', bub.textContent.length > 22);
+      }
     }
 
     // ---------- turn history arrows: step the board back through the plays ----------
     const reviewing = () => reviewIdx !== null;
-    function reviewCells() {   // squares to hide: tiles from plays after the one being viewed
-      const hidden = new Set();
-      if (!reviewing()) return hidden;
-      for (const p of S.plays.slice(reviewIdx + 1)) for (const [r, c] of p.cells) hidden.add(`${r},${c}`);
-      return hidden;
+    // Stepping back only *describes* an earlier turn (word + score in the black bar) and highlights its
+    // squares; the board itself always stays as it is now.
+    function exitReview() {    // back to the current turn (called when a tile is picked up)
+      if (!reviewing()) return;
+      reviewIdx = null;
+      renderReview();
+      renderBoard();
     }
     function stepReview(dir) {
       const n = (S.plays || []).length;
@@ -710,6 +715,7 @@
       local.selected = null; local.selectedBoard = null;
       render();
     }
+    let queuedBanner = null;   // a play that arrived while the tab was hidden; shown when it is visible again
     function showPlayBanner(play) {
       const old = document.querySelector('.play-banner');
       if (old) old.remove();
@@ -718,10 +724,17 @@
         h('div', { class: 'play-banner-score', text: `+${play.score} point${play.score === 1 ? '' : 's'}` }));
       el.addEventListener('animationend', () => el.remove());
       document.body.append(el);
+      // With reduced motion the CSS animation is off (no animationend), so don't leave the banner up forever.
+      setTimeout(() => el.remove(), 3200);
     }
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && queuedBanner) { const play = queuedBanner; queuedBanner = null; showPlayBanner(play); }
+    });
     function renderReview() {
       const n = (S.plays || []).length;
-      if (bannerPlays !== null && n > bannerPlays && !document.hidden) showPlayBanner(S.plays[n - 1]);
+      if (bannerPlays !== null && n > bannerPlays) {
+        if (document.hidden) queuedBanner = S.plays[n - 1]; else showPlayBanner(S.plays[n - 1]);
+      }
       bannerPlays = n;
       if (n !== reviewPlays) { reviewPlays = n; reviewIdx = null; }   // a new play (or take-back) returns to live
       const box = $('turn-review');
@@ -732,20 +745,19 @@
       box.hidden = !reviewing();
       if (!reviewing()) return;
       const p = S.plays[reviewIdx];
-      box.replaceChildren(h('b', { text: p.words.join(', ') }), h('span', { text: ` +${p.score} points · ${p.name} (play ${reviewIdx + 1} of ${n})` }));
+      box.replaceChildren(h('b', { text: p.words.join(', ') }), h('span', { text: ` +${p.score} · ${p.name} (${reviewIdx + 1}/${n})` }));
     }
     if ($('turn-prev')) $('turn-prev').addEventListener('click', () => stepReview(-1));
     if ($('turn-next')) $('turn-next').addEventListener('click', () => stepReview(1));
 
     function renderBoard() {
       renderReview();
-      const hiddenCells = reviewCells();
       const reviewLast = reviewing() ? new Set(S.plays[reviewIdx].cells.map(([r, c]) => `${r},${c}`)) : null;
       const lastCells = reviewLast || new Set((S.last_move ? S.last_move.cells : []).map(([r, c]) => `${r},${c}`));
       const mine = new Map();   // my tentative tiles (my turn) or my staged tiles (off turn)
       // Unplayed tiles are private: the opponent's tentative tiles are never drawn.
       const staging = !canEdit() && canStage();
-      if ((canEdit() || staging) && !reviewing()) {
+      if (canEdit() || staging) {
         for (const p of local.pending) {
           const isBlank = S.rack[p.rack_index] === '?';
           mine.set(`${p.row},${p.col}`, { letter: p.letter, blank: isBlank, boost: letterMult(p.row, p.col) });
@@ -764,7 +776,7 @@
         for (let c = builtBounds.left; c <= builtBounds.right; c += 1) {
           const key = `${r},${c}`;
           const cell = cells.get(key);
-          const placed = hiddenCells.has(key) ? undefined : S.board[key];
+          const placed = S.board[key];
           const isCursor = boardCursor && boardCursor.row === r && boardCursor.col === c;
           let sig;
           let kind = null;
@@ -1607,12 +1619,14 @@
     els.rack.addEventListener('pointerdown', (event) => {
       const tile = event.target.closest('.tile');
       if (!tile || tile.dataset.index === undefined) return;
+      exitReview();
       startPress({ type: 'rack', index: Number(tile.dataset.index) }, tile, event);
     });
 
     els.board.addEventListener('pointerdown', (event) => {
       const tile = event.target.closest('.tile.pending');
       if (!tile) return;
+      exitReview();
       const cell = tile.closest('.cell');
       startPress({ type: 'board', row: Number(cell.dataset.row), col: Number(cell.dataset.col) }, tile, event);
     });
@@ -1667,6 +1681,7 @@
         } else {
           curIdx = curIdx < 0 || curIdx >= indices.length - 1 ? 0 : curIdx + 1;
         }
+        exitReview();
         local.selected = indices[curIdx];
         local.selectedBoard = null;
         renderRack();
@@ -1709,6 +1724,7 @@
         // If there's a tentative tile on boardCursor, pick it up or remove it
         const existingPending = local.pending.find((p) => p.row === r && p.col === c);
         if (existingPending) {
+          exitReview();
           local.selected = existingPending.rack_index;
           removePending(r, c);
           render();

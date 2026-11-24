@@ -44,31 +44,89 @@ App.bag = (() => {
   // ---------- definitions tab ----------
   const defCache = {};
   let defWord = null;
+
+  // fetch -> { ok: true, data } | { ok: false } (reached the server, no such entry) | { ok: null } (network error)
+  async function getJson(url) {
+    try {
+      const r = await fetch(url, { headers: { Accept: 'application/json' } });
+      if (!r.ok) return { ok: false };
+      return { ok: true, data: await r.json() };
+    } catch (err) { return { ok: null }; }
+  }
+  const htmlText = (html) => new DOMParser().parseFromString(html, 'text/html').body.textContent.trim();
+
+  // Wiktionary: the REST payload is keyed by the headword's language code; keep only the game's language
+  // (an "eta" page also has Spanish, Finnish... entries) and fall back to everything if that key is absent.
+  function wiktionaryDefs(data, lang) {
+    const groups = data[lang] ? [data[lang]] : Object.values(data);
+    const out = [];
+    for (const entries of groups) for (const e of entries) for (const d of e.definitions || []) {
+      const text = htmlText(d.definition || '');
+      if (text) out.push(text);
+    }
+    return out;
+  }
+
+  async function lookupOne(word, lang, state) {
+    const sources = lang === 'en'
+      ? [
+        async () => {
+          const res = await getJson('https://api.dictionaryapi.dev/v2/entries/en/' + encodeURIComponent(word));
+          if (res.ok !== true) return res.ok === null ? (state.network = true, []) : [];
+          const out = [];
+          for (const e of res.data) for (const m of e.meanings || []) for (const d of m.definitions || []) out.push(d.definition);
+          return out;
+        },
+        async () => {
+          const res = await getJson('https://en.wiktionary.org/api/rest_v1/page/definition/' + encodeURIComponent(word));
+          if (res.ok !== true) return res.ok === null ? (state.network = true, []) : [];
+          return wiktionaryDefs(res.data, 'en');
+        },
+      ]
+      : [async () => {
+        const res = await getJson(`https://${lang}.wiktionary.org/api/rest_v1/page/definition/` + encodeURIComponent(word));
+        if (res.ok !== true) return res.ok === null ? (state.network = true, []) : [];
+        return wiktionaryDefs(res.data, lang);
+      }];
+    for (const src of sources) {
+      const defs = await src();
+      if (defs.length) return defs;
+    }
+    return [];
+  }
+
+  // Candidate base forms for plurals / verb forms, tried only when the word itself has no entry.
+  function stems(word) {
+    const out = [];
+    const add = (w) => { if (w.length > 1 && w !== word && !out.includes(w)) out.push(w); };
+    if (word.endsWith('ies')) add(word.slice(0, -3) + 'y');
+    if (word.endsWith('es')) add(word.slice(0, -2));
+    if (word.endsWith('s')) add(word.slice(0, -1));
+    if (word.endsWith('ed')) { add(word.slice(0, -2)); add(word.slice(0, -1)); }
+    if (word.endsWith('ing')) { add(word.slice(0, -3)); add(word.slice(0, -3) + 'e'); }
+    return out;
+  }
+
   async function fetchDefinition(word, lang) {
     const key = lang + ':' + word;
     if (defCache[key]) return defCache[key];
     const lower = word.toLowerCase();
-    let result = [];
-    try {
-      if (lang === 'en') {
-        const r = await fetch('https://api.dictionaryapi.dev/v2/entries/en/' + encodeURIComponent(lower));
-        if (r.ok) {
-          const data = await r.json();
-          for (const e of data) for (const m of e.meanings || []) for (const d of m.definitions || []) result.push(d.definition);
-        }
-      } else {
-        const r = await fetch(`https://${lang}.wiktionary.org/api/rest_v1/page/definition/` + encodeURIComponent(lower));
-        if (r.ok) {
-          const data = await r.json();
-          for (const entries of Object.values(data)) for (const e of entries) for (const d of e.definitions || []) {
-            const text = new DOMParser().parseFromString(d.definition, 'text/html').body.textContent.trim();
-            if (text) result.push(text);
-          }
-        }
+    const state = { network: false };
+    let result = await lookupOne(lower, lang, state);
+    if (!result.length && lang === 'en') {
+      for (const stem of stems(lower)) {
+        const base = await lookupOne(stem, lang, state);
+        if (base.length) { result = base.slice(0, 4).map((d) => `(form of “${stem}”) ${d}`); break; }
       }
-    } catch (err) { result = null; }
-    if (result) defCache[key] = result.slice(0, 8);
-    return result ? result.slice(0, 8) : null;
+    }
+    if (!result.length) {
+      // Nothing found: distinguish "no entry" from "could not reach the dictionary"; only cache real answers.
+      if (state.network) return null;
+      defCache[key] = [];
+      return [];
+    }
+    defCache[key] = result.slice(0, 8);
+    return defCache[key];
   }
 
   function renderDefs(S) {
@@ -90,7 +148,7 @@ App.bag = (() => {
       chips.append(h('button', { type: 'button', class: 'def-chip' + (w === defWord ? ' is-active' : ''), text: w, onclick: () => { defWord = w; renderDefs(S); } }));
     }
     const box = h('div', { class: 'def-box' }, h('h3', { class: 'def-title', text: defWord.toLowerCase() }), h('p', { class: 'bag-hidden', text: 'Loading…' }));
-    body.append(chips, box, h('div', { class: 'def-attr', text: 'Powered by ' + (S.language === 'en' ? 'Free Dictionary API' : 'Wiktionary') }));
+    body.append(chips, box, h('div', { class: 'def-attr', text: 'Powered by ' + (S.language === 'en' ? 'Free Dictionary API + Wiktionary' : 'Wiktionary') }));
     const asked = defWord;
     fetchDefinition(asked, S.language).then((defs) => {
       if (asked !== defWord) return;
@@ -155,7 +213,14 @@ App.bag = (() => {
       for (const tab of document.querySelectorAll('#bag-pop .bag-tab')) {
         tab.addEventListener('click', () => { if (!tab.disabled) setBagTab(tab.dataset.tab); });
       }
-      document.addEventListener('click', (e) => { if (!e.target.closest('#bag-pop, #bag-btn')) toggleBagPop(null, false); });
+      // The definitions tab rebuilds its own DOM when a word chip is clicked, so by the time this runs the
+      // clicked element is detached and `closest()` would wrongly say "outside". Use the original event path.
+      document.addEventListener('click', (e) => {
+        const path = typeof e.composedPath === 'function' ? e.composedPath() : [];
+        if (path.some((n) => n && (n.id === 'bag-pop' || n.id === 'bag-btn'))) return;
+        if (!path.length && e.target.closest && e.target.closest('#bag-pop, #bag-btn')) return;
+        toggleBagPop(null, false);
+      });
     }
   }
 
