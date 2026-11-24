@@ -152,6 +152,8 @@
     function toast(message, isError = false) {
       els.toast.textContent = message;
       els.toast.className = isError ? 'toast error' : 'toast';
+      els.toast.setAttribute('role', isError ? 'alert' : 'status');
+      if (!isError) els.toast.setAttribute('aria-live', 'polite');
       els.toast.hidden = false;
       clearTimeout(toastTimer);
       toastTimer = setTimeout(() => { els.toast.hidden = true; }, isError ? 5000 : 3500);
@@ -689,7 +691,7 @@
     function showPlayBanner(play) {
       const old = document.querySelector('.play-banner');
       if (old) old.remove();
-      const el = h('div', { class: 'play-banner', role: 'status' },
+      const el = h('div', { class: 'play-banner', role: 'status', 'aria-live': 'polite' },
         h('div', { class: 'play-banner-word', text: play.words.join(' · ') }),
         h('div', { class: 'play-banner-score', text: `+${play.score} point${play.score === 1 ? '' : 's'}` }));
       el.addEventListener('animationend', () => el.remove());
