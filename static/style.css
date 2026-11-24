@@ -167,12 +167,7 @@ input[type="text"], select {
 .turn-banner.over { background: var(--black); }
 .turn-banner.alert { background: var(--danger); }
 
-.toast {
-  position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 2000;
-  background: var(--black); color: #fff; padding: 10px 16px; border-radius: 12px; max-width: min(92vw, 520px);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, .35); font-size: 14px; font-weight: 700;
-}
-.toast.error { background: var(--danger); }
+
 
 :root {
   --base-font-size: 16px;
@@ -219,12 +214,7 @@ body {
 .board-col { min-width: 0; }
 .board-wrap { position: relative; }
 .board-scroll { border-radius: var(--radius); }
-.minimap {
-  position: absolute; right: 8px; bottom: 8px; width: 132px; height: 96px; z-index: 5;
-  border: 2px solid var(--black, #1b1b1b); border-radius: 8px; box-shadow: 0 2px 8px rgba(0, 0, 0, .25);
-  touch-action: none; cursor: pointer; opacity: .92;
-}
-.minimap[hidden] { display: none; }
+
 .board-scroll.panning, .board-scroll.panning * { cursor: grabbing !important; user-select: none; }
 .board-scroll.zoomed { cursor: grab; }
 .board.zoomed { }
@@ -254,10 +244,7 @@ body {
 .cell.drop-ok { outline: 3px solid var(--hl); outline-offset: -2px; z-index: 2; background-image: linear-gradient(rgba(164, 109, 249, .25), rgba(164, 109, 249, .25)); }
 .cell.can-drop { cursor: pointer; }
 /* While a tile is selected, mark every square it could go on (tap-to-place). */
-.cell.can-drop::after {
-  content: ""; position: absolute; inset: 30%; border-radius: 50%;
-  background: rgba(164, 109, 249, .35); pointer-events: none;
-}
+
 
 /* ---------- tiles ---------- */
 .tile {
