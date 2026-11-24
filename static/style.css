@@ -291,7 +291,10 @@ body {
 .board .tile.opp-ghost {
   background: rgba(164, 109, 249, .18); box-shadow: none; border: 2px dashed var(--accent-dark); opacity: .9;
 }
-@media (prefers-reduced-motion: reduce) { .board .tile { animation: none !important; } }
+@media (prefers-reduced-motion: reduce) {
+  .board .tile, .timer.low, .play-banner, .toast { animation: none !important; }
+  *, *::before, *::after { transition-duration: 0s !important; animation-duration: 0s !important; scroll-behavior: auto !important; }
+}
 
 /* ---------- rack ---------- */
 .rack {

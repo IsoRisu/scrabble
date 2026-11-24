@@ -17,6 +17,7 @@
 
   function startConfetti(canvas) {
     if (confetti) return;
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const ctx = canvas.getContext('2d');
     const colors = ['#ff8f65', '#ffd05f', '#aef6ab', '#abe6ff', '#9b5de5', '#ff6f9c'];
     const size = () => { canvas.width = canvas.clientWidth; canvas.height = canvas.clientHeight; };
