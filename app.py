@@ -31,8 +31,8 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 from game.board import GameError
 from game.room import (
-    CONFIG, DEFAULT_LENGTH, DEFAULT_MODE, LENGTHS, MAX_PLAYERS, MODES, TIMERS, RoomRegistry, available_languages, check_capacity,
-    check_expand_margin, check_language, check_players, diff_views, length_for_players,
+    CONFIG, DEFAULT_LENGTH, DEFAULT_MODE, LENGTHS, MAX_PLAYERS, MODES, TIMERS, RoomRegistry, available_languages,
+    check_expand_margin, check_language, diff_views, length_for_players,
 )
 
 log = logging.getLogger("scrabble")

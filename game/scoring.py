@@ -1,7 +1,7 @@
 """Premium squares and move scoring."""
 from dataclasses import dataclass
 
-from .tiles import RACK_SIZE, tile_value
+from .tiles import RACK_SIZE
 
 BINGO_BONUS = 50
 

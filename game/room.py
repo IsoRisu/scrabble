@@ -69,7 +69,7 @@ from dataclasses import dataclass, field
 
 from .board import BOARD_COLS, BOARD_ROWS, BOARD_SIZE, CENTER, WILD_CENTER, Board, GameError, Placement, classic_bounds, initial_bounds
 from .scoring import BINGO_BONUS, PERIOD, PREMIUM, WILD_PERIOD, WILD_PREMIUM, letter_boost, score_move, word_factor
-from .tiles import BLANK, LANGUAGES, RACK_SIZE, TILE_DISTRIBUTIONS, TILE_VALUES, VOWELS, new_bag, tile_value
+from .tiles import BLANK, LANGUAGES, RACK_SIZE, TILE_DISTRIBUTIONS, VOWELS, new_bag, tile_value
 
 ROOM_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no 0/O/1/I
 ROOM_CODE_LENGTH = 8
@@ -1230,7 +1230,8 @@ class Room:
         rooms only the words of the play they challenged."""
         if self.rules == "challenge":
             return list(player.challenge_words)
-        seen, out = set(), []
+        seen = set()
+        out = []
         for entry in reversed(self.history):
             for w in entry.get("words", []) if entry["kind"] == "play" else []:
                 if w not in seen:
