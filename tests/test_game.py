@@ -1835,17 +1835,22 @@ class RestartTests(unittest.TestCase):
         self.assertGreater(room.turns_played, 0)
 
         room.restart(a)
+        # (1) board is empty after restart
         self.assertTrue(room.board.is_empty())
+        # (2) all scores are 0
         self.assertEqual(a.score, 0)
         self.assertEqual(b.score, 0)
+        # (3) every player has a full rack
         self.assertEqual(len(a.rack), 7)
         self.assertEqual(len(b.rack), 7)
+        # (4) turns_played is 0
         self.assertEqual(room.turns_played, 0)
         self.assertEqual(room.status, "playing")
 
-    def test_restart_rejected_while_waiting(self):
+    def test_restart_raises_game_error_while_status_is_waiting(self):
         set_words(WORDS)
         room = Room("WAITING", rng=random.Random(1))
         a = room.add_player("Alice")
+        # (5) restart raises GameError while status is "waiting"
         with self.assertRaisesRegex(GameError, "not started"):
             room.restart(a)
