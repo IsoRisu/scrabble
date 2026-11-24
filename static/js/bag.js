@@ -111,7 +111,6 @@ App.bag = (() => {
   function initBag(getState) {
     if ($('bag-btn')) {
       $('bag-btn').addEventListener('click', (e) => { e.stopPropagation(); toggleBagPop(getState()); });
-      $('bag-btn').addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleBagPop(getState()); } });
       for (const tab of document.querySelectorAll('#bag-pop .bag-tab')) {
         tab.addEventListener('click', () => { if (!tab.disabled) setBagTab(tab.dataset.tab); });
       }
