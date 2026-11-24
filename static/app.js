@@ -400,6 +400,8 @@
 
     // ---------- diff-based rendering optimizations ----------
     let lastRenderStateSig = null;
+    let lastBoardStateSig = null;
+    let lastPlayersStateSig = null;
 
     function render() {
       renderVictory();
@@ -752,6 +754,11 @@
       const oppSet = new Set(!canEdit() && Array.isArray(S.opp_pending) ? S.opp_pending.map(([r, c]) => `${r},${c}`) : []);
       const placing = canPlace() && (local.selected !== null || local.selectedBoard !== null);
       const sb = local.selectedBoard;
+
+      const boardSig = JSON.stringify([S.board, local.pending, S.opp_pending, reviewIdx, boardCursor, placing, sb, staging]);
+      if (lastBoardStateSig === boardSig) return;
+      lastBoardStateSig = boardSig;
+
       for (let r = builtBounds.top; r <= builtBounds.bottom; r += 1) {
         for (let c = builtBounds.left; c <= builtBounds.right; c += 1) {
           const key = `${r},${c}`;
@@ -858,6 +865,10 @@
     }
 
     function renderPlayers() {
+      const playersSig = JSON.stringify([S.players, S.status, S.current, S.you, S.skippable, S.max_players]);
+      if (lastPlayersStateSig === playersSig) return;
+      lastPlayersStateSig = playersSig;
+
       const totalActive = S.players.length;
       const showPlaceholder = S.status === 'waiting' && totalActive < (S.max_players || 2);
       const totalSlots = totalActive + (showPlaceholder ? 1 : 0);
