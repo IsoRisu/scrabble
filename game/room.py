@@ -946,19 +946,7 @@ class Room:
         }
 
     # ---- turn actions ------------------------------------------------
-    def submit(self, player):
-        """Commit the tentative placement as this player's move."""
-        self._require_free_turn(player)
-        if not player.pending:
-            raise GameError("Place at least one tile first.")
-        placements = self._placements(player)
-        words = self.board.analyze(placements)
-        if self.rules == "strict":
-            bad = sorted({w.text for w in words if w.text not in get_words(self.language)})
-            if bad:
-                raise GameError("Not in the dictionary: " + ", ".join(bad) + ".")
-        score = score_move(words, len(placements), self.language, self.mode)
-
+    def _apply_play(self, player, placements, words, score):
         # Take the tiles off the rack, draw replacements, put them on the board.
         used_indices = sorted({p["rack_index"] for p in player.pending})
         used_tiles = [player.rack[i] for i in used_indices]
@@ -1008,6 +996,21 @@ class Room:
             "used_tiles": used_tiles,
             "prev_scoreless": self.scoreless_turns,
         }
+        return drawn, used_tiles, texts
+
+        """Commit the tentative placement as this player's move."""
+        self._require_free_turn(player)
+        if not player.pending:
+            raise GameError("Place at least one tile first.")
+        placements = self._placements(player)
+        words = self.board.analyze(placements)
+        if self.rules == "strict":
+            bad = sorted({w.text for w in words if w.text not in get_words(self.language)})
+            if bad:
+                raise GameError("Not in the dictionary: " + ", ".join(bad) + ".")
+        score = score_move(words, len(placements), self.language, self.mode)
+
+        drawn, used_tiles, texts = self._apply_play(player, placements, words, score)
         self.scoreless_turns = 0
 
         if not player.rack:  # went out (the bag must be empty too)
