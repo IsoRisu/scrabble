@@ -89,6 +89,12 @@ Run the tests:
 python -m unittest discover -s tests -v
 ```
 
+## Tests
+
+- `tests/test_app.py`: Covers HTTP smoke tests and health check endpoints.
+- `tests/test_game.py`: Covers comprehensive unit tests for the Scrabble rules engine, rooms, scoring, and multiplayer flow.
+- `tests/test_wild_board.py`: Covers Wild-board specific tests including layout properties, premium squares, and board growth.
+
 The browser loads the Socket.IO client from a CDN and the UI font from Google Fonts (with fallbacks), so the page needs internet access. Definitions also need internet access.
 
 ## HTTP API
