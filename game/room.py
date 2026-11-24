@@ -1382,7 +1382,7 @@ class Room:
 # --------------------------------------------------------------------------
 # Registry limits and cleanup TTL defaults (in seconds)
 DEFAULT_MAX_ROOMS = 2000
-DEFAULT_IDLE_TTL = 24 * 3600
+DEFAULT_IDLE_TTL = 2 * 3600
 DEFAULT_ABANDONED_TTL = 2 * 3600
 
 
@@ -1444,6 +1444,7 @@ class RoomRegistry:
         now = time.time()
         for code, room in list(self._rooms.items()):
             idle = now - room.last_active
-            abandoned = room.connected_count() == 0 and idle > self.abandoned_ttl
-            if idle > self.idle_ttl or abandoned:
+            finished = room.status == "finished" and idle > self.idle_ttl
+            abandoned = (room.connected_count() == 0 or room.status == "finished") and idle > self.abandoned_ttl
+            if finished or abandoned or idle > self.idle_ttl:
                 del self._rooms[code]

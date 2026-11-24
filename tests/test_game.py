@@ -1249,6 +1249,19 @@ class MiscTests(unittest.TestCase):
         registry.purge()
         self.assertIsNone(registry.get(room.code))
 
+    def test_registry_purges_finished_or_abandoned_rooms_after_two_hours(self):
+        registry = RoomRegistry(idle_ttl=7200, abandoned_ttl=7200)
+        room = registry.create()
+        room.status = "finished"
+        room.last_active -= 7201
+        registry.purge()
+        self.assertIsNone(registry.get(room.code))
+
+        room2 = registry.create()
+        room2.last_active -= 7201
+        registry.purge()
+        self.assertIsNone(registry.get(room2.code))
+
     def test_unknown_mode_and_length(self):
         with self.assertRaises(GameError):
             Room("X", mode="chaos")
