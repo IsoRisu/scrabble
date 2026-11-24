@@ -861,3 +861,18 @@ button, .btn, .icon-btn, select, input[type="text"], .tile, .cell.can-drop {
 .field-check .check-row { display: flex; align-items: flex-start; gap: 12px; cursor: pointer; }
 .field-check input[type="checkbox"] { width: 22px; height: 22px; margin-top: 2px; flex: 0 0 auto; accent-color: var(--accent-dark); }
 .field-check small { display: block; font-weight: 500; color: var(--muted); font-size: .82em; margin-top: 2px; }
+@media (pointer: coarse) {
+  .btn, button, .icon-btn, .tab, .chip, .bag-tab, .def-chip, .tr-chip, select, input[type="text"] {
+    min-height: 44px;
+    min-width: 44px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+  .icon-btn {
+    width: 44px;
+    height: 44px;
+    padding: 0;
+  }
+}
