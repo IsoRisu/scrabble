@@ -164,15 +164,20 @@
     }
 
     // ---------- modals ----------
-    function showModal(build, { dismissible = true, onClose = null } = {}) {
+    function showModal(build, { dismissible = true, onClose = null, opener = document.activeElement } = {}) {
       const backdrop = h('div', { class: 'modal-backdrop' });
       const modal = h('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true' });
       backdrop.append(modal);
+      let removeTrap = null;
       const api = {
         modal,
         close() {
+          if (removeTrap) removeTrap();
           document.removeEventListener('keydown', onKey);
           backdrop.remove();
+          if (opener && typeof opener.focus === 'function') {
+            try { opener.focus(); } catch (_) {}
+          }
           if (onClose) onClose();
         },
       };
@@ -183,8 +188,12 @@
       }
       build(modal, api);
       els.modalRoot.append(backdrop);
-      const focusable = modal.querySelector('input, button');
-      if (focusable) focusable.focus();
+      if (window.App.util && window.App.util.trapFocus) {
+        removeTrap = window.App.util.trapFocus(modal, dismissible ? () => api.close() : null);
+      } else {
+        const focusable = modal.querySelector('input, button');
+        if (focusable) focusable.focus();
+      }
       return api;
     }
 

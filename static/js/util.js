@@ -36,12 +36,55 @@ App.util = (() => {
   const LENGTH_LABEL = { short: 'Short', medium: 'Medium', full: 'Full' };
   const lengthText = (key) => LENGTH_LABEL[key] || key;
 
+  function trapFocus(modal, onDismiss) {
+    const focusableSelector = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+    const focusableElements = Array.from(modal.querySelectorAll(focusableSelector));
+    const firstElement = focusableElements[0];
+    const lastElement = focusableElements[focusableElements.length - 1];
+
+    if (firstElement) {
+      firstElement.focus();
+    } else {
+      modal.setAttribute('tabindex', '-1');
+      modal.focus();
+    }
+
+    function handleKeydown(e) {
+      if (e.key === 'Tab') {
+        if (focusableElements.length === 0) {
+          e.preventDefault();
+          return;
+        }
+        if (e.shiftKey) {
+          if (document.activeElement === firstElement) {
+            lastElement.focus();
+            e.preventDefault();
+          }
+        } else {
+          if (document.activeElement === lastElement) {
+            firstElement.focus();
+            e.preventDefault();
+          }
+        }
+      } else if (e.key === 'Escape' && typeof onDismiss === 'function') {
+        e.preventDefault();
+        onDismiss();
+      }
+    }
+
+    modal.addEventListener('keydown', handleKeydown);
+    return () => {
+      modal.removeEventListener('keydown', handleKeydown);
+    };
+  }
+
   return {
     $,
     h,
     store,
     timerText,
     lengthText,
+    trapFocus,
   };
 })();
 window.App = App;
