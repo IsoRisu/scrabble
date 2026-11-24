@@ -1415,10 +1415,12 @@
     let reactRaf = 0;
     function reactFrame(now) {
       reactRaf = 0;
-      const tiles = els.rack.querySelectorAll('.tile');
+      const tiles = Array.from(els.rack.querySelectorAll('.tile'));
       let busy = reactPoint !== null;
-      tiles.forEach((tile) => {
-        if (press && press.el === tile) return;
+      
+      // Phase 1: Reads (layout reads)
+      const readData = tiles.map((tile) => {
+        if (press && press.el === tile) return null;
         let st = reactState.get(tile);
         if (!st) { st = { tx: 0, ty: 0, p: 0, phase: Math.random() * Math.PI * 2 }; reactState.set(tile, st); }
         const size = tile.offsetWidth || 48;
@@ -1442,6 +1444,13 @@
         st.tx += (dx - st.tx) * 0.22;                // spring/lerp towards the target
         st.ty += (dy - st.ty) * 0.22;
         st.p += (targetP - st.p) * 0.22;             // amplitude ramps with proximity
+        return { tile, st, targetP };
+      });
+
+      // Phase 2: Writes (style updates)
+      readData.forEach((item) => {
+        if (!item) return;
+        const { tile, st } = item;
         if (st.p < 0.003 && !reactPoint && Math.abs(st.tx) < 0.05 && Math.abs(st.ty) < 0.05) {
           st.tx = st.ty = st.p = 0;
           tile.style.translate = tile.style.rotate = tile.style.scale = '';
@@ -1455,6 +1464,7 @@
         tile.style.rotate = `${rot.toFixed(2)}deg`;
         tile.style.scale = pulse.toFixed(4);
       });
+
       if (busy) reactRaf = requestAnimationFrame(reactFrame);
     }
     function reactTo(x, y) {
@@ -1744,7 +1754,7 @@
       minimapQueued = true;
       requestAnimationFrame(() => { minimapQueued = false; updateMinimap(); });
     };
-    els.boardScroll.addEventListener('scroll', queueMinivemap, { passive: true });
+    els.boardScroll.addEventListener('scroll', queueMinimap, { passive: true });
     window.addEventListener('resize', queueMinimap, { passive: true });
     function minimapJump(event) {
       const box = els.boardScroll;
