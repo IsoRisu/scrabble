@@ -73,9 +73,14 @@
     for (const p of plays) for (const w of p.words) {
       if (!longest || w.length > longest.word.length || (w.length === longest.word.length && p.score > longest.play.score)) longest = { word: w, play: p };
     }
-    const crown = '<svg viewBox="0 0 100 60" class="vic-crown" aria-hidden="true"><path d="M8 52 L2 12 L28 32 L50 4 L72 32 L98 12 L92 52 Z" fill="#ffb02e" stroke="#e8861a" stroke-width="4" stroke-linejoin="round"/><circle cx="2" cy="12" r="5" fill="#ff6f43"/><circle cx="50" cy="4" r="5" fill="#ff6f43"/><circle cx="98" cy="12" r="5" fill="#ff6f43"/></svg>';
-    const crownEl = h('span', { class: 'vic-crown-wrap' });
-    crownEl.innerHTML = crown;
+    const crownEl = h('span', { class: 'vic-crown-wrap' },
+      h('svg', { viewBox: '0 0 100 60', class: 'vic-crown', 'aria-hidden': 'true' },
+        h('path', { d: 'M8 52 L2 12 L28 32 L50 4 L72 32 L98 12 L92 52 Z', fill: '#ffb02e', stroke: '#e8861a', 'stroke-width': '4', 'stroke-linejoin': 'round' }),
+        h('circle', { cx: '2', cy: '12', r: '5', fill: '#ff6f43' }),
+        h('circle', { cx: '50', cy: '4', r: '5', fill: '#ff6f43' }),
+        h('circle', { cx: '98', cy: '12', r: '5', fill: '#ff6f43' })
+      )
+    );
     const stat = (label, entry, pts, word) => h('div', { class: 'vic-stat' },
       h('div', { class: 'vic-stat-head' }, avatar(entry.name, 'sm'),
         h('div', { class: 'vic-stat-who' }, h('b', { text: label }), h('span', { text: entry.name })),
