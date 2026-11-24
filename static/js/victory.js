@@ -123,7 +123,7 @@
     fresh.dataset.sig = vsig;
     if (root) root.replaceWith(fresh); else document.body.append(fresh);
     stopConfetti();
-    startConfetti(canvas);
+    if (!victoryHidden) startConfetti(canvas);
     if (!root || root.hidden) victoryOpener = document.activeElement;
     if (victoryTrapRemove) victoryTrapRemove();
     if (window.App.util && window.App.util.trapFocus) {
