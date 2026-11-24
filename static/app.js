@@ -99,6 +99,7 @@
     let cells = new Map();   // "row,col" -> element (absolute board coordinates, may be negative)
     let builtBounds = null;  // bounds the current DOM grid was built for
     let builtMode = null;    // scoring mode the grid's premium squares were drawn for
+    let boardCursor = null;  // {row, col} for keyboard board navigation
 
     // Display text for the game settings (the server owns the actual rules).
     const MODE_INFO = {
@@ -752,6 +753,7 @@
           const key = `${r},${c}`;
           const cell = cells.get(key);
           const placed = hiddenCells.has(key) ? undefined : S.board[key];
+          const isCursor = boardCursor && boardCursor.row === r && boardCursor.col === c;
           let sig;
           let kind = null;
           let info = null;
@@ -759,22 +761,23 @@
           if (placed) {
             kind = lastCells.has(key) ? 'last' : '';
             info = { letter: placed.l, blank: placed.b, boost: placed.m || 1 };
-            sig = `b:${placed.l}:${placed.b ? 1 : 0}:${info.boost}:${kind}`;
+            sig = `b:${placed.l}:${placed.b ? 1 : 0}:${info.boost}:${kind}:${isCursor ? 1 : 0}`;
           } else if (mine.has(key)) {
             kind = staging ? 'pending staged' : 'pending';
             info = mine.get(key);
             sel = !!sb && sb.row === r && sb.col === c;
-            sig = `p${staging ? 's' : ''}:${S.mode}:${info.letter}:${info.blank ? 1 : 0}:${info.boost}:${sel ? 1 : 0}`;
+            sig = `p${staging ? 's' : ''}:${S.mode}:${info.letter}:${info.blank ? 1 : 0}:${info.boost}:${sel ? 1 : 0}:${isCursor ? 1 : 0}`;
           } else if (oppSet.has(key)) {
-            sig = 'o';   // opponent is placing a tile here: outline only, no letter
+            sig = `o:${isCursor ? 1 : 0}`;   // opponent is placing a tile here: outline only, no letter
           } else {
-            sig = 'e';
+            sig = `e:${isCursor ? 1 : 0}`;
           }
           cell.classList.toggle('can-drop', !info && placing);
+          cell.classList.toggle('board-cursor', isCursor);
           if (cell.dataset.sig === sig) continue;
           cell.dataset.sig = sig;
           cell.replaceChildren();
-          if (sig === 'o') {
+          if (sig.startsWith('o')) {
             cell.append(h('div', { class: 'tile opp-ghost', 'aria-label': 'Opponent is placing a tile here' }));
           } else if (info) {
             const tile = makeTile(info.letter, info.blank, sel ? `${kind} selected` : kind, info.boost || 1, S.mode === 'wild', r, c);
@@ -1584,6 +1587,79 @@
     if (window.App.zoom && window.App.zoom.initZoom) {
       window.App.zoom.initZoom(els, config, () => cells, () => local, centerOf, queueMinimap);
     }
+
+    // ---------- keyboard play navigation ----------
+    document.addEventListener('keydown', async (event) => {
+      if (!S || S.status !== 'playing') return;
+      const target = event.target;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT')) return;
+
+      const placeable = canPlace();
+      const indices = placeable ? rackIndices().filter((i) => !local.pending.some((p) => p.rack_index === i)) : [];
+
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        if (indices.length === 0) return;
+        event.preventDefault();
+        let curIdx = local.selected !== null ? indices.indexOf(local.selected) : -1;
+        if (event.key === 'ArrowLeft') {
+          curIdx = curIdx <= 0 ? indices.length - 1 : curIdx - 1;
+        } else {
+          curIdx = curIdx < 0 || curIdx >= indices.length - 1 ? 0 : curIdx + 1;
+        }
+        local.selected = indices[curIdx];
+        local.selectedBoard = null;
+        renderRack();
+        renderBoard();
+        renderPreview();
+        return;
+      }
+
+      if (event.key === 'ArrowUp' || event.key === 'ArrowDown' || event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        if (!builtBounds) return;
+        event.preventDefault();
+        if (!boardCursor) {
+          const [cr, cc] = centerOf();
+          boardCursor = { row: cr, col: cc };
+        } else {
+          let dr = 0, dc = 0;
+          if (event.key === 'ArrowUp') dr = -1;
+          if (event.key === 'ArrowDown') dr = 1;
+          if (event.key === 'ArrowLeft') dc = -1;
+          if (event.key === 'ArrowRight') dc = 1;
+          boardCursor.row += dr;
+          boardCursor.col += dc;
+        }
+        renderBoard();
+        const cell = cells.get(`${boardCursor.row},${boardCursor.col}`);
+        if (cell) cell.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+        return;
+      }
+
+      if (event.key === 'Enter') {
+        if (!placeable) return;
+        event.preventDefault();
+        if (!boardCursor) {
+          const [cr, cc] = centerOf();
+          boardCursor = { row: cr, col: cc };
+        }
+        const r = boardCursor.row;
+        const c = boardCursor.col;
+
+        // If there's a tentative tile on boardCursor, pick it up or remove it
+        const existingPending = local.pending.find((p) => p.row === r && p.col === c);
+        if (existingPending) {
+          local.selected = existingPending.rack_index;
+          removePending(r, c);
+          render();
+          return;
+        }
+
+        // If a rack tile is selected, place it at boardCursor
+        if (local.selected !== null) {
+          await placeFromRack(local.selected, r, c);
+        }
+      }
+    });
 
     // ---------- minimap ----------
     // A small overview of the whole (possibly very large) board with the visible part outlined.
