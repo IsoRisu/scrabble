@@ -1256,6 +1256,41 @@ class Room:
             "total": len(unseen),
         }
 
+    def _view_players(self):
+        return [
+            {
+                "seat": p.seat,
+                "name": p.name,
+                "score": p.score,
+                "rack_count": len(p.rack),
+                "connected": p.connected,
+                "resigned": p.resigned,
+            }
+            for p in self.players
+        ]
+
+    def _view_settings(self):
+        return {
+            "room": self.code,
+            "rules": self.rules,
+            "mode": self.mode,
+            "length": self.length,
+            "timer": self.timer,
+            "language": self.language,
+            "max_players": self.max_players,
+            "auto_check": self.auto_check,
+            "show_distribution": self.show_distribution,
+            "auto_expand": self.auto_expand,
+            "expand_margin": self.expand_margin,
+            "settings_locked": self.settings_locked,
+        }
+
+    def _view_definitions(self, player):
+        return {
+            "definitions_locked": self.rules == "challenge" and not player.challenge_words,
+            "definition_words": self._definition_words(player),
+        }
+
     def view_for(self, player):
         """Everything `player` is allowed to see, as plain JSON-able data."""
         self._sync_clock()
@@ -1297,44 +1332,20 @@ class Room:
             and self.last_move is not None
             and self.last_move["seat"] != player.seat
         )
-        return {
-            "room": self.code,
-            "rules": self.rules,
-            "mode": self.mode,
-            "length": self.length,
-            "timer": self.timer,
-            "language": self.language,
-            "max_players": self.max_players,
-            "auto_check": self.auto_check,
-            "show_distribution": self.show_distribution,
+        data = {
             "plays": self.plays,
-            "definitions_locked": self.rules == "challenge" and not player.challenge_words,
-            "definition_words": self._definition_words(player),
             "letter_values": {t: tile_value(t, self.language) for t in TILE_DISTRIBUTIONS[self.language]},
             "skippable": self.skippable_seat() if player.seat != self.skippable_seat() else None,
             "can_start": self.status == "waiting" and player.seat == 0 and len(self.players) >= MIN_PLAYERS,
-            "auto_expand": self.auto_expand,
-            "expand_margin": self.expand_margin,
             "bounds": self.board.bounds(),
             "turn_ms_left": ms_left,
             "timer_paused": playing and self.timer_paused_left is not None,
             "host": self.host_seat(),
             "tiles": self.tile_tracker(player),
-            "settings_locked": self.settings_locked,
             "status": self.status,
             "you": player.seat,
             "current": self.current if playing else None,
-            "players": [
-                {
-                    "seat": p.seat,
-                    "name": p.name,
-                    "score": p.score,
-                    "rack_count": len(p.rack),
-                    "connected": p.connected,
-                    "resigned": p.resigned,
-                }
-                for p in self.players
-            ],
+            "players": self._view_players(),
             "bag_count": len(self.bag),
             "board": self.board.to_dict(),
             "pending": pending,
@@ -1357,6 +1368,9 @@ class Room:
             "winner": self.winner,
             "final": self.final,
         }
+        data.update(self._view_settings())
+        data.update(self._view_definitions(player))
+        return data
 
 
 # --------------------------------------------------------------------------
