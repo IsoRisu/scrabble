@@ -15,14 +15,14 @@ CENTER = (7, 7)  # classic start star
 WILD_CENTER = (12, 12)
 
 
-def initial_bounds():
+def initial_bounds() -> dict[str, int]:
     """Playing area of a fresh Wild board: {"top", "bottom", "left", "right"} (inclusive)."""
     top = WILD_CENTER[0] - (BOARD_ROWS - 1) // 2
     left = WILD_CENTER[1] - (BOARD_COLS - 1) // 2
     return {"top": top, "bottom": top + BOARD_ROWS - 1, "left": left, "right": left + BOARD_COLS - 1}
 
 
-def classic_bounds():
+def classic_bounds() -> dict[str, int]:
     """The standard 15x15 Scrabble grid."""
     return {"top": 0, "bottom": BOARD_SIZE - 1, "left": 0, "right": BOARD_SIZE - 1}
 
@@ -52,15 +52,15 @@ class WordCell:
 
 @dataclass(frozen=True)
 class Word:
-    cells: tuple
+    cells: tuple[WordCell, ...]
 
     @property
-    def text(self):
+    def text(self) -> str:
         return "".join(cell.letter for cell in self.cells)
 
 
 class Board:
-    def __init__(self, classic=False, center=None):
+    def __init__(self, classic: bool = False, center: tuple[int, int] | None = None) -> None:
         # Sparse grid: (row, col) -> Tile.  Coordinates never shift; the
         # playable area is the rectangle below, which starts as 25x25 and grows
         # in any direction (negative coordinates are valid) when auto-expansion is on.
@@ -73,23 +73,23 @@ class Board:
         self.bottom, self.right = start["bottom"], start["right"]
 
     @property
-    def tile_count(self):
+    def tile_count(self) -> int:
         return len(self.grid)
 
     # ---- basic access ------------------------------------------------
-    def in_bounds(self, row, col):
+    def in_bounds(self, row: int, col: int) -> bool:
         return self.top <= row <= self.bottom and self.left <= col <= self.right
 
-    def bounds(self):
+    def bounds(self) -> dict[str, int]:
         return {"top": self.top, "bottom": self.bottom, "left": self.left, "right": self.right}
 
-    def get(self, row, col):
+    def get(self, row: int, col: int) -> Tile | None:
         return self.grid.get((row, col))
 
-    def is_empty(self):
+    def is_empty(self) -> bool:
         return not self.grid
 
-    def expand_to_margin(self, margin):
+    def expand_to_margin(self, margin: int) -> bool:
         """Make sure at least `margin` empty rings surround every placed tile.
 
         A side only grows when a tile is within `margin` rings of it, and it
@@ -110,7 +110,7 @@ class Board:
         self.top, self.left, self.bottom, self.right = new
         return changed
 
-    def shrink_to_margin(self, margin):
+    def shrink_to_margin(self, margin: int) -> bool:
         """Undo growth that is no longer needed (after tiles were taken back).
 
         The area is the starting rectangle plus `margin` rings around the remaining
@@ -128,7 +128,7 @@ class Board:
         self.top, self.left, self.bottom, self.right = top, left, bottom, right
         return changed
 
-    def place_all(self, placements, boosts=None):
+    def place_all(self, placements: list[Placement] | tuple[Placement, ...], boosts: dict[tuple[int, int], int] | None = None) -> None:
         """Put tiles on the board. `boosts` maps (row, col) -> permanent letter multiplier."""
         boosts = boosts or {}
         for p in placements:
@@ -136,19 +136,19 @@ class Board:
                 raise GameError("That square is already taken.")
             self.grid[(p.row, p.col)] = Tile(p.letter, p.blank, boosts.get((p.row, p.col), 1))
 
-    def multiply_boosts(self, factors):
+    def multiply_boosts(self, factors: dict[tuple[int, int], int]) -> None:
         """Multiply the permanent boost of tiles already on the board: {(row, col): factor}."""
         for key, factor in factors.items():
             tile = self.grid.get(key)
             if tile is not None and factor != 1:
                 self.grid[key] = tile._replace(boost=tile.boost * factor)
 
-    def remove_all(self, placements):
+    def remove_all(self, placements: list[Placement] | tuple[Placement, ...]) -> None:
         """Take tiles back off the board (used when a challenge succeeds)."""
         for p in placements:
             self.grid.pop((p.row, p.col), None)
 
-    def to_dict(self):
+    def to_dict(self) -> dict[str, dict[str, str | bool | int]]:
         """JSON-friendly snapshot: {"row,col": {"l": letter, "b": is_blank, "m": boost}}."""
         return {
             f"{r},{c}": {"l": tile.letter, "b": tile.blank, "m": tile.boost}
@@ -156,14 +156,14 @@ class Board:
         }
 
     # ---- move analysis -----------------------------------------------
-    def _touches_existing(self, row, col):
+    def _touches_existing(self, row: int, col: int) -> bool:
         """True if (row, col) is orthogonally next to a tile already on the board."""
         return any(
             self.get(row + dr, col + dc) is not None
             for dr, dc in ((1, 0), (-1, 0), (0, 1), (0, -1))
         )
 
-    def analyze(self, placements):
+    def analyze(self, placements: list[Placement] | tuple[Placement, ...]) -> list[Word]:
         """Check that `placements` is a legal play and return the words it forms.
 
         Raises GameError with a player-friendly message if it is not legal.
@@ -196,7 +196,7 @@ class Board:
             if len(new) < 2:
                 raise GameError("The first word must be at least two letters long.")
 
-        def at(r, c):
+        def at(r: int, c: int) -> Tile | None:
             if (r, c) in new:
                 return new[(r, c)]
             return self.get(r, c)
@@ -217,7 +217,7 @@ class Board:
         if not first_move and not any(self._touches_existing(r, c) for r, c in new):
             raise GameError("Your word must connect to tiles already on the board.")
 
-        def run(row, col, dr, dc):
+        def run(row: int, col: int, dr: int, dc: int) -> Word:
             """The maximal line of tiles through (row, col) in direction (dr, dc)."""
             while at(row - dr, col - dc) is not None:
                 row, col = row - dr, col - dc
