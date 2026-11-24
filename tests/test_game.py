@@ -37,6 +37,22 @@ def word_placements(word, row, col, horizontal=True):
 
 
 class TileTests(unittest.TestCase):
+    def test_finnish_tile_distribution(self):
+        dist = TILE_DISTRIBUTIONS["fi"]
+        values = TILE_VALUES["fi"]
+        self.assertEqual(sum(dist.values()), 101)
+        self.assertEqual(dist[BLANK], 2)
+        self.assertEqual(dist["W"], 1)
+        self.assertEqual(values["W"], 8)
+
+        rng = random.Random(1)
+        bag_50 = new_bag("fi", rng, 50)
+        self.assertEqual(len(bag_50), 50)
+
+        rng = random.Random(1)
+        bag_150 = new_bag("fi", rng, 150)
+        self.assertEqual(len(bag_150), 150)
+
     def test_bag_has_standard_distribution(self):
         bag = new_bag("en", random.Random(1))
         self.assertEqual(len(bag), 100)
