@@ -359,16 +359,21 @@
     // `boost` is the letter multiplier shown on the tile: the one a tile on the board
     // earned (Wild keeps it for good) or the one of the square a tentative tile sits on.
     // `tint` colours boosted tiles (Wild mode) so everyone can see which were multiplied.
-    function makeTile(letter, blank, extra = '', boost = 1, tint = false) {
+    function makeTile(letter, blank, extra = '', boost = 1, tint = false, row = null, col = null) {
       const children = [h('span', { class: 'l', text: letter || '' })];
-      const mult = !blank && boost > 1 ? boost : 1;
-      if (!blank) children.push(h('span', { class: 'v', text: String(tileValue(letter) * mult) }));
-      const tinted = mult > 1 && tint;
-      const boostClass = mult >= 4 ? 'boost-hi' : `boost-${mult}`;
+      const val = !blank ? tileValue(letter) * (!blank && boost > 1 ? boost : 1) : 0;
+      if (!blank) children.push(h('span', { class: 'v', text: String(val) }));
+      const tinted = !blank && boost > 1 && tint;
+      const boostClass = !blank && boost >= 4 ? 'boost-hi' : `boost-${!blank && boost > 1 ? boost : 1}`;
       const cls = `tile${blank ? ' blank' : ''}${tinted ? ` boosted ${boostClass}` : ''}${extra ? ` ${extra}` : ''}`;
-      if (tinted && mult >= 4) children.push(h('span', { class: 'm', text: `x${mult}` }));
+      if (tinted && !blank && boost >= 4) children.push(h('span', { class: 'm', text: `x${boost}` }));
       const tile = h('div', { class: cls }, children);
-      if (tinted) tile.setAttribute('title', `Worth ${tileValue(letter) * mult} (x${mult} bonus kept)`);
+      if (tinted) tile.setAttribute('title', `Worth ${val} (x${boost} bonus kept)`);
+      if (row !== null && col !== null && !blank && letter) {
+        tile.setAttribute('aria-label', `Letter ${letter}, ${val} point${val === 1 ? '' : 's'}, row ${row}, column ${col}`);
+      } else if (row !== null && col !== null && blank) {
+        tile.setAttribute('aria-label', `Blank tile, row ${row}, column ${col}`);
+      }
       return tile;
     }
 
@@ -763,7 +768,7 @@
           if (sig === 'o') {
             cell.append(h('div', { class: 'tile opp-ghost', 'aria-label': 'Opponent is placing a tile here' }));
           } else if (info) {
-            const tile = makeTile(info.letter, info.blank, sel ? `${kind} selected` : kind, info.boost || 1, S.mode === 'wild');
+            const tile = makeTile(info.letter, info.blank, sel ? `${kind} selected` : kind, info.boost || 1, S.mode === 'wild', r, c);
             if (kind.startsWith('pending')) {
               tile.setAttribute('title', (staging ? 'Staged for your next turn. ' : '')
                 + 'Drag to move. Tap to pick it up, then tap a square (or the rack to take it back).');
