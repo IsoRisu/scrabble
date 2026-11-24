@@ -92,17 +92,17 @@ VOWELS = {
 }
 
 
-def alphabet(lang="en"):
+def alphabet(lang: str = "en") -> list[str]:
     """The letters (no blank) a tile can stand for in this language."""
     return sorted(t for t in TILE_DISTRIBUTIONS[lang] if t != BLANK)
 
 
-def tile_value(tile, lang="en"):
+def tile_value(tile: str, lang: str = "en") -> int:
     """Points for a rack tile: a letter, or BLANK."""
     return TILE_VALUES[lang].get(tile, 0)
 
 
-def new_bag(lang="en", rng=None, size=None):
+def new_bag(lang: str = "en", rng: random.Random | None = None, size: int | None = None) -> list[str]:
     """Return a freshly shuffled bag for a language.
 
     By default the bag holds exactly one full set of tiles. With `size`, it holds
