@@ -46,6 +46,15 @@
 .ll-stage .board-scroll.zoomed {
   overflow: auto; width: 100%; height: 100%; max-height: none; cursor: grab; touch-action: pan-x pan-y; user-select: none; -webkit-user-select: none;
 }
+.ll-stage .board {
+  touch-action: pan-x pan-y;
+}
+.ll-rack-area .rack .tile, .rack .tile {
+  touch-action: none;
+}
+.ll-stage button, .ll-stage .btn, .btn, button {
+  touch-action: manipulation;
+}
 .ll-stage .board-scroll.zoomed .board { max-width: none; flex: none; }
 .ll-stage .board-scroll.panning { cursor: grabbing; }
 .ll-stage .board-scroll.is-active { }
