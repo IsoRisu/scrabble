@@ -1766,7 +1766,17 @@
       requestAnimationFrame(() => { minimapQueued = false; updateMinimap(); });
     };
     els.boardScroll.addEventListener('scroll', queueMinimap, { passive: true });
-    window.addEventListener('resize', queueMinimap, { passive: true });
+    const debouncedQueueMinimap = (() => {
+      let timeout = null;
+      return () => {
+        if (timeout) return;
+        timeout = setTimeout(() => {
+          timeout = null;
+          queueMinimap();
+        }, 100);
+      };
+    })();
+    window.addEventListener('resize', debouncedQueueMinimap, { passive: true });
     function minimapJump(event) {
       const box = els.boardScroll;
       const rect = els.minimap.getBoundingClientRect();
