@@ -1216,10 +1216,16 @@ class DiffTests(unittest.TestCase):
 class MiscTests(unittest.TestCase):
     def test_clean_name(self):
         self.assertEqual(clean_name("  Al   ice \n"), "Al ice")
-        self.assertEqual(clean_name("x" * 50), "x" * 20)
+        self.assertEqual(clean_name("x" * 50), "x" * 24)
         self.assertEqual(clean_name(None), "")
         self.assertEqual(clean_name(12), "")
         self.assertEqual(clean_name("a\x00b\x07c"), "abc")
+
+    def test_player_name_length_limit(self):
+        long_name = "A" * 30
+        name = clean_name(long_name)
+        self.assertEqual(len(name), 24)
+        self.assertEqual(name, "A" * 24)
 
     def test_registry(self):
         registry = RoomRegistry(max_rooms=2)

@@ -276,7 +276,10 @@ def on_join(data=None):
         player = room.player_by_token(token) if token else None
         if player is None:
             try:
-                player = room.add_player(data.get("name"))
+                name = data.get("name")
+                if isinstance(name, str):
+                    name = name.strip()[:24]
+                player = room.add_player(name)
             except GameError as exc:
                 return {"ok": False, "code": "full", "error": str(exc)}
         # (Re)bind this socket to the player.  Dropping the old baseline forces
