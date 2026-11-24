@@ -9,6 +9,8 @@
   <link rel="icon" href="data:image/svg+xml,&lt;svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22&gt;&lt;rect width=%22100%22 height=%22100%22 rx=%2220%22 fill=%22%23ff8c00%22/%3E&lt;text x=%2250%22 y=%2270%22 font-size=%2265%22 font-weight=%22bold%22 font-family=%22sans-serif%22 fill=%22%23ffffff%22 text-anchor=%22middle%22&gt;S&lt;/text&gt;&lt;/svg&gt;">
   <title>Scrabble - Play multiplayer word game online</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='dark.css') }}">
+  <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
 </head>
 <body data-page="index">
   <main class="landing responsive-container">
@@ -91,7 +93,10 @@
 
     <section class="card">
       <h2>Rules & Help</h2>
-      <button id="btn-rules" class="btn" type="button">Rules</button>
+      <div class="row">
+        <button id="btn-rules" class="btn" type="button">Rules</button>
+        <button id="btn-theme" class="btn" type="button" data-theme-toggle>Theme: Auto (system)</button>
+      </div>
     </section>
 
     <section class="card">
@@ -105,8 +110,6 @@
       <p id="join-error" class="form-error" role="alert" hidden></p>
     </section>
   </main>
-  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js" crossorigin="anonymous" onerror="this.outerHTML='&lt;div class=&quot;banner banner-error&quot; role=&quot;alert&quot;&gt;Cannot reach the game server library. Check your connection and reload.&lt;/div&gt;'"></script>
-  <script src="{{ url_for('static', filename='js/util.js') }}"></script>
   <dialog id="rules-modal" class="modal">
     <div class="modal-content">
       <h2>How to play</h2>

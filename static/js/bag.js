@@ -1,4 +1,4 @@
-const App = window.App || {};
+// `App` is created by util.js (loaded first); don't redeclare it here.
 App.bag = (() => {
   const { $, h } = App.util;
 

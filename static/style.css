@@ -8,7 +8,7 @@
  *    green  #aef6ab  blue #abe6ff  yellow #ffd05f   premium squares
  * ------------------------------------------------------------------ */
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
   --bg: #ffe5c6;
   --bg-2: #fff3df;
   --panel: #fff3df;
@@ -40,36 +40,6 @@
   --rack-tile: clamp(38px, calc((100vw - 60px) / 7), 64px);
   --zoom-cell: 44px;           /* board square size when "Zoom board" is on */
   --radius: 16px;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #1c1410;
-    --bg-2: #2b1f18;
-    --panel: #2b1f18;
-    --panel-border: #5c3a29;
-    --ink: #fce8df;
-    --muted: #d09c85;
-    --accent: #b07efc;
-    --accent-dark: #9356f9;
-    --accent-soft: #cfb2ff;
-    --coral: #e05e35;
-    --black: #f0ede6;
-    --danger: #ff6853;
-    --gold: #ffbe3b;
-    --hl: #b07efc;
-
-    --tile-1: #ff8f65;
-    --tile-2: #ff7244;
-    --tile-edge: #823c28;
-    --tile-ink: #ffffff;
-
-    --sq-normal: #2b1f18;
-    --sq-tw: #6d42af;
-    --sq-dw: #b38822;
-    --sq-tl: #1f4222;
-    --sq-dl: #0b3750;
-  }
 }
 
 /* High-resolution and 1440p/4k scaling improvements */

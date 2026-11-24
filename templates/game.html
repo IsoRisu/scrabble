@@ -13,6 +13,8 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='shell.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='board.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='dark.css') }}">
+  <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
 </head>
 <body data-page="game" data-room="{{ code }}" data-mode="{{ mode }}" data-length="{{ length }}" data-timer="{{ timer }}">
   <div id="toast" class="toast" role="alert" hidden></div>
@@ -64,6 +66,7 @@
         <button id="btn-info" class="ll-pill" type="button">How to play</button>
         <button id="btn-zoom" class="ll-pill zoom-btn" type="button" aria-pressed="false">Zoom</button>
         <button id="btn-drawer-tracker-toggle" class="ll-pill" type="button">Stats</button>
+        <button id="btn-theme" class="ll-pill" type="button" data-theme-toggle>Theme: Auto (system)</button>
         <button id="btn-resign" class="ll-pill ll-pill-danger" type="button" hidden>Resign</button>
       </div>
       <section id="game-settings" class="ll-settings" aria-label="Game settings">
@@ -141,8 +144,7 @@
 
   <div id="modal-root"></div>
 
-  <!-- TODO: download https://cdn.socket.io/4.7.5/socket.io.min.js to static/vendor/socket.io.min.js -->
-  <script src="/static/vendor/socket.io.min.js" crossorigin="anonymous" onerror="this.outerHTML='&lt;script src=&quot;https://cdn.socket.io/4.7.5/socket.io.min.js&quot; crossorigin=&quot;anonymous&quot;&gt;&lt;\/script>&lt;div class=&quot;banner banner-error&quot; role=&quot;alert&quot;&gt;Cannot reach the game server library. Check your connection and reload.&lt;/div&gt;'"></script>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js" crossorigin="anonymous" onerror="document.body.insertAdjacentHTML('afterbegin','<div class=&quot;banner banner-error&quot; role=&quot;alert&quot;>Cannot reach the game server library. Check your connection and reload.</div>')"></script>
   <script src="{{ url_for('static', filename='js/util.js') }}"></script>
   <script src="{{ url_for('static', filename='js/zoom.js') }}"></script>
   <script src="{{ url_for('static', filename='js/bag.js') }}"></script>

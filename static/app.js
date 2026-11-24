@@ -1325,13 +1325,22 @@
       }
       // eslint-disable-next-line no-undef
       socket = io({ reconnectionDelayMax: 5000 });
-      socket.on('connect', () => { setConn('ok', 'online'); doJoin(); });
+      let connectErrors = 0;
+      socket.on('connect', () => { connectErrors = 0; setConn('ok', 'online'); doJoin(); });
       socket.on('disconnect', () => {
         setConn('wait', 'reconnecting…');
         local.inflight = 0;
         busy = false;
       });
-      socket.on('connect_error', () => setConn('wait', 'reconnecting…'));
+      socket.on('connect_error', () => {
+        setConn('wait', 'reconnecting…');
+        // Don't sit on "Connecting…" forever: say so once the server has been unreachable a few times.
+        connectErrors += 1;
+        if (connectErrors === 3 && !S) {
+          els.banner.textContent = "Offline – retrying…";
+          toast("Can't reach the game server. Retrying…", true);
+        }
+      });
       socket.on('state', onState);
       socket.on('state_diff', onDiff);
     }
@@ -1638,10 +1647,6 @@
       el.addEventListener('contextmenu', (event) => { if (event.target.closest('.tile')) event.preventDefault(); });
     }
 
-    if (window.App.zoom && window.App.zoom.initZoom) {
-      window.App.zoom.initZoom(els, config, () => cells, () => local, centerOf, queueMinimap);
-    }
-
     // ---------- keyboard play navigation ----------
     document.addEventListener('keydown', async (event) => {
       if (!S || S.status !== 'playing') return;
@@ -1777,6 +1782,11 @@
       };
     })();
     window.addEventListener('resize', debouncedQueueMinimap, { passive: true });
+
+    // Must run after queueMinimap is defined (const -> temporal dead zone).
+    if (window.App.zoom && window.App.zoom.initZoom) {
+      window.App.zoom.initZoom(els, config, () => cells, () => local, centerOf, queueMinimap);
+    }
     function minimapJump(event) {
       const box = els.boardScroll;
       const rect = els.minimap.getBoundingClientRect();
@@ -1952,7 +1962,7 @@
     if (zoomPref === '1' || (zoomPref === null && window.innerWidth <= 700)) {
       setZoom(true, { center: false, persist: zoomPref !== null });
     }
-    els.modeLabel.textContent = `${modeLabel(document.body.dataset.mode)} · ${LENGTH_LABEL[document.body.dataset.length] || ''}${timerShort(document.body.dataset.timer)}`;
+    els.modeLabel.textContent = `${modeLabel(document.body.dataset.mode)} · ${lengthText(document.body.dataset.length) || ''}${timerShort(document.body.dataset.timer)}`;
     if (session.token) {
       startSocket(); // saved session token -> rejoin automatically
     } else {

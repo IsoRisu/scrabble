@@ -108,7 +108,7 @@ body[data-page="game"] {
   border: 0; background: #2f2c33; cursor: pointer; display: flex; flex-direction: column; align-items: center;
   justify-content: center; gap: .32rem; padding: 0; box-shadow: 0 .2rem .6rem rgba(0, 0, 0, .3);
 }
-.ll-menu-btn i { display: block; width: 1.8rem; height: .26rem; border-radius: .2rem; background: #fff; }
+.ll-menu-btn i, .ll-menu-btn span { display: block; width: 1.8rem; height: .26rem; border-radius: .2rem; background: #fff; }
 .ll-menu {
   position: absolute; top: 5.2rem; right: 1rem; z-index: 40; width: min(26rem, 90vw); max-height: calc(100vh - 7rem);
   overflow-y: auto; background: #fff3df; color: #4a2416; border-radius: 1rem; padding: 1rem;
@@ -199,6 +199,7 @@ body .ll-bubble.bottom-sheet-status { display: block; position: relative; left: 
 >
 .ll-act-play { background: #a9a3ad; flex: 1.35 1 0; }
 .ll-act-play:not(:disabled) { background: #3fb860; }
+.ll-act-play:disabled { opacity: 1; background: #6f6874; color: #fff; }
 .ll-act-mini { flex: 0 0 2.4rem; background: var(--ll-purple-light); }
 .ll-act:disabled { opacity: .75; cursor: not-allowed; }
 .ll-act-orange:disabled { opacity: .55; }

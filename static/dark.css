@@ -1,0 +1,206 @@
+/* Dark theme. Applies when the OS prefers dark (unless the player forced light),
+ * or when the player forced dark via the in-game / lobby theme toggle (see js/theme.js).
+ * The two blocks below are identical apart from their root selector.
+ * Loaded after every other stylesheet. */
+:root[data-theme="light"] { color-scheme: light; }
+
+/* ===== forced dark ===== */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  /* style.css tokens */
+  --bg: #1c1410; --bg-2: #2b1f18; --panel: #2b1f18; --panel-border: #5c3a29;
+  --ink: #fce8df; --muted: #d09c85;
+  --accent: #b07efc; --accent-dark: #9356f9; --accent-soft: #cfb2ff;
+  --coral: #e05e35; --black: #f0ede6; --danger: #ff6853; --gold: #ffbe3b; --hl: #b07efc;
+  --tile-1: #ff8f65; --tile-2: #ff7244; --tile-edge: #823c28; --tile-ink: #fff;
+  --sq-normal: #2b1f18; --sq-tw: #6d42af; --sq-dw: #b38822; --sq-tl: #1f4222; --sq-dl: #0b3750;
+  --high-contrast-ink: #fce8df; --high-contrast-muted: #d09c85;
+  /* shell.css tokens */
+  --ll-bg: #1c1410; --color-beige: #3a2a20; --color-ink: #fce8df;
+  /* board.css tokens */
+  --b-line: #120c09; --b-cell: #2b1f18;
+  --b-2l: #0b3750; --b-2l-ink: #3d8fb8;
+  --b-3l: #7a5a12; --b-3l-ink: #d9a21f;
+  --b-2w: #1f4222; --b-2w-ink: #4fae4b;
+  --b-3w: #8a3a1e; --b-3w-ink: #e0693a;
+}
+
+/* ---- forms & buttons ---- */
+:root[data-theme="dark"] input[type="text"], :root[data-theme="dark"] input[type="search"], :root[data-theme="dark"] input[type="number"], :root[data-theme="dark"] select, :root[data-theme="dark"] textarea {
+  background: var(--bg-2); color: var(--ink); border-color: var(--panel-border);
+}
+:root[data-theme="dark"] input::placeholder, :root[data-theme="dark"] textarea::placeholder { color: var(--muted); opacity: 1; }
+:root[data-theme="dark"] select option { background: var(--bg-2); color: var(--ink); }
+:root[data-theme="dark"] .btn { background: var(--bg-2); color: var(--ink); border-color: var(--panel-border); }
+:root[data-theme="dark"] .btn:hover:not(:disabled) { background: var(--panel-border); }
+:root[data-theme="dark"] .btn-primary { background: var(--accent-dark); border-color: var(--accent); color: #fff; }
+:root[data-theme="dark"] .btn-primary:hover:not(:disabled) { background: var(--accent); }
+:root[data-theme="dark"] .btn-danger { background: #b52b16; border-color: #72190c; color: #fff; }
+:root[data-theme="dark"] .btn-danger:hover:not(:disabled) { background: #c9381f; }
+:root[data-theme="dark"] .btn-link { background: transparent; border-color: transparent; color: inherit; }
+:root[data-theme="dark"] .banner-error { background: #4a1d17; color: #ffd0c7; }
+:root[data-theme="dark"] .banner-info { background: #33254f; color: #e3d6ff; }
+
+/* ---- text that was hard-coded dark brown ---- */
+:root[data-theme="dark"] .modal p, :root[data-theme="dark"] .hint, :root[data-theme="dark"] .form-error, :root[data-theme="dark"] .modal-info li, :root[data-theme="dark"] .bottom-sheet-status, :root[data-theme="dark"] .tagline,
+:root[data-theme="dark"] .field span, :root[data-theme="dark"] .bag, :root[data-theme="dark"] .history-wrap h3, :root[data-theme="dark"] .vic-who span { color: var(--muted); }
+:root[data-theme="dark"] .history li, :root[data-theme="dark"] .results td { border-bottom-color: var(--panel-border); }
+:root[data-theme="dark"] .modal-backdrop { background: rgba(0, 0, 0, .6); }
+:root[data-theme="dark"] .cell { color: rgba(252, 232, 223, .85); }
+:root[data-theme="dark"] .rack { background: linear-gradient(#3a2a20, #2f2119); box-shadow: inset 0 3px 6px rgba(0, 0, 0, .4), 0 4px 0 rgba(0, 0, 0, .25); }
+:root[data-theme="dark"] .floating-bottom-overlay, :root[data-theme="dark"] .floating-overlay-panel { background: rgba(43, 31, 24, .96); }
+:root[data-theme="dark"] .overlay-toggle-btn { background: rgba(255, 255, 255, .08); }
+:root[data-theme="dark"] .overlay-toggle-btn:hover { background: rgba(255, 255, 255, .16); }
+:root[data-theme="dark"] .player-card .you { background: var(--bg-2); }
+:root[data-theme="dark"] .board .tile.blank { background: linear-gradient(#e9d9c8, #cdb69c); }
+
+/* ---- game shell ---- */
+:root[data-theme="dark"] .ll-menu-btn { background: #5c3a29; box-shadow: 0 0 0 2px #b07efc, 0 .2rem .6rem rgba(0, 0, 0, .5); }
+:root[data-theme="dark"] .ll-menu-btn i, :root[data-theme="dark"] .ll-menu-btn span { background: #fce8df; }
+:root[data-theme="dark"] .ll-menu { background: #2b1f18; color: #fce8df; box-shadow: 0 .5rem 1.6rem rgba(0, 0, 0, .6); }
+:root[data-theme="dark"] .ll-menu-head code { background: #3a2a20; }
+:root[data-theme="dark"] .ll-settings { background: #382820; }
+:root[data-theme="dark"] .ll-lock { background: #5c3a29; }
+:root[data-theme="dark"] .ll-settings-grid dt, :root[data-theme="dark"] .ll-settings-note, :root[data-theme="dark"] .bag-total small, :root[data-theme="dark"] .bag-hidden, :root[data-theme="dark"] .def-attr { color: #d09c85; }
+:root[data-theme="dark"] .ll-players .player-card { background: #382820; border-color: #5c3a29; color: #fce8df; }
+:root[data-theme="dark"] .ll-players .player-card::before {
+  background: #382820 radial-gradient(circle at 50% 50%, hsl(var(--seat-hue, 270) 62% 60%) 0 .5rem, #382820 .55rem);
+  box-shadow: inset 0 0 0 .15rem #5c3a29, 0 0 0 .1rem hsl(var(--seat-hue, 270) 62% 60%);
+}
+:root[data-theme="dark"] .ll-players .player-card.active { border-color: var(--gold); }
+:root[data-theme="dark"] .ll-players .player-card.waiting { border-left-color: #5c3a29; }
+:root[data-theme="dark"] .ll-players .player-card .name { color: #fce8df; }
+:root[data-theme="dark"] .ll-players .player-card .score { color: #8fb3ff; }
+:root[data-theme="dark"] .ll-bubble { background: #2b1f18; box-shadow: 0 .2rem .6rem rgba(0, 0, 0, .4); }
+:root[data-theme="dark"] .ll-bubble::before { border-right-color: #2b1f18; }
+:root[data-theme="dark"] .ll-preview { color: #fce8df; }
+:root[data-theme="dark"] .ll-act-play { background: #4a3f45; }
+:root[data-theme="dark"] .ll-act-play:not(:disabled) { background: #2f9b4e; }
+:root[data-theme="dark"] .ll-act-play:disabled { background: #4a3f45; color: #e8dcd6; }
+:root[data-theme="dark"] .ll-rack-area .rack { background: rgba(0, 0, 0, .35); box-shadow: inset 0 0 0 .15rem rgba(92, 58, 41, .8); }
+:root[data-theme="dark"] .bag-pop { background: #2b1f18; box-shadow: 0 .3rem 1.2rem rgba(0, 0, 0, .6); }
+:root[data-theme="dark"] .bag-pop::after { border-top-color: #2b1f18; }
+:root[data-theme="dark"] .bag-tab { background: #3a2a20; color: #fce8df; }
+:root[data-theme="dark"] .bag-tab.is-active { background: #7c4fd6; color: #fff; }
+:root[data-theme="dark"] .def-chip { background: #3a2a20; color: #fce8df; }
+:root[data-theme="dark"] .def-chip.is-active { background: var(--color-orange-light); color: #fff; }
+:root[data-theme="dark"] .turn-review { background: #5c3a29; }
+
+/* ---- board squares (light text on dark premium squares) ---- */
+:root[data-theme="dark"] .ll-stage .board .cell.dl { color: #bfe9ff; }
+:root[data-theme="dark"] .ll-stage .board .cell.tl { color: #ffe9a8; }
+:root[data-theme="dark"] .ll-stage .board .cell.dw { color: #c4f5c1; }
+:root[data-theme="dark"] .ll-stage .board .cell.tw { color: #ffd2bd; }
+:root[data-theme="dark"] .ll-stage .board .cell.center { background: #3a2a20; color: #b07efc; }
+:root[data-theme="dark"] .ll-stage .board .cell.dl, :root[data-theme="dark"] .ll-stage .board .cell.tl, :root[data-theme="dark"] .ll-stage .board .cell.dw, :root[data-theme="dark"] .ll-stage .board .cell.tw { text-shadow: none; }
+
+/* ---- victory screen ---- */
+:root[data-theme="dark"] .victory { color: #fce8df; }
+:root[data-theme="dark"] .vic-board { background: rgba(18, 12, 9, .7); }
+:root[data-theme="dark"] .vic-leaders, :root[data-theme="dark"] .vic-right { background: #2b1f18; }
+:root[data-theme="dark"] .vic-stat-pts b { color: #fce8df; }
+:root[data-theme="dark"] .vic-you { background: #4a2f22; }
+:root[data-theme="dark"] .vic-next, :root[data-theme="dark"] .vic-reopen { background: #5c3a29; }
+:root[data-theme="dark"] .vic-reopen { box-shadow: 0 0 0 2px #b07efc; }
+
+/* ===== automatic dark (OS preference) ===== */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    /* style.css tokens */
+    --bg: #1c1410; --bg-2: #2b1f18; --panel: #2b1f18; --panel-border: #5c3a29;
+    --ink: #fce8df; --muted: #d09c85;
+    --accent: #b07efc; --accent-dark: #9356f9; --accent-soft: #cfb2ff;
+    --coral: #e05e35; --black: #f0ede6; --danger: #ff6853; --gold: #ffbe3b; --hl: #b07efc;
+    --tile-1: #ff8f65; --tile-2: #ff7244; --tile-edge: #823c28; --tile-ink: #fff;
+    --sq-normal: #2b1f18; --sq-tw: #6d42af; --sq-dw: #b38822; --sq-tl: #1f4222; --sq-dl: #0b3750;
+    --high-contrast-ink: #fce8df; --high-contrast-muted: #d09c85;
+    /* shell.css tokens */
+    --ll-bg: #1c1410; --color-beige: #3a2a20; --color-ink: #fce8df;
+    /* board.css tokens */
+    --b-line: #120c09; --b-cell: #2b1f18;
+    --b-2l: #0b3750; --b-2l-ink: #3d8fb8;
+    --b-3l: #7a5a12; --b-3l-ink: #d9a21f;
+    --b-2w: #1f4222; --b-2w-ink: #4fae4b;
+    --b-3w: #8a3a1e; --b-3w-ink: #e0693a;
+  }
+
+  /* ---- forms & buttons ---- */
+  :root:not([data-theme="light"]) input[type="text"], :root:not([data-theme="light"]) input[type="search"], :root:not([data-theme="light"]) input[type="number"], :root:not([data-theme="light"]) select, :root:not([data-theme="light"]) textarea {
+    background: var(--bg-2); color: var(--ink); border-color: var(--panel-border);
+  }
+  :root:not([data-theme="light"]) input::placeholder, :root:not([data-theme="light"]) textarea::placeholder { color: var(--muted); opacity: 1; }
+  :root:not([data-theme="light"]) select option { background: var(--bg-2); color: var(--ink); }
+  :root:not([data-theme="light"]) .btn { background: var(--bg-2); color: var(--ink); border-color: var(--panel-border); }
+  :root:not([data-theme="light"]) .btn:hover:not(:disabled) { background: var(--panel-border); }
+  :root:not([data-theme="light"]) .btn-primary { background: var(--accent-dark); border-color: var(--accent); color: #fff; }
+  :root:not([data-theme="light"]) .btn-primary:hover:not(:disabled) { background: var(--accent); }
+  :root:not([data-theme="light"]) .btn-danger { background: #b52b16; border-color: #72190c; color: #fff; }
+  :root:not([data-theme="light"]) .btn-danger:hover:not(:disabled) { background: #c9381f; }
+  :root:not([data-theme="light"]) .btn-link { background: transparent; border-color: transparent; color: inherit; }
+  :root:not([data-theme="light"]) .banner-error { background: #4a1d17; color: #ffd0c7; }
+  :root:not([data-theme="light"]) .banner-info { background: #33254f; color: #e3d6ff; }
+
+  /* ---- text that was hard-coded dark brown ---- */
+  :root:not([data-theme="light"]) .modal p, :root:not([data-theme="light"]) .hint, :root:not([data-theme="light"]) .form-error, :root:not([data-theme="light"]) .modal-info li, :root:not([data-theme="light"]) .bottom-sheet-status, :root:not([data-theme="light"]) .tagline,
+  :root:not([data-theme="light"]) .field span, :root:not([data-theme="light"]) .bag, :root:not([data-theme="light"]) .history-wrap h3, :root:not([data-theme="light"]) .vic-who span { color: var(--muted); }
+  :root:not([data-theme="light"]) .history li, :root:not([data-theme="light"]) .results td { border-bottom-color: var(--panel-border); }
+  :root:not([data-theme="light"]) .modal-backdrop { background: rgba(0, 0, 0, .6); }
+  :root:not([data-theme="light"]) .cell { color: rgba(252, 232, 223, .85); }
+  :root:not([data-theme="light"]) .rack { background: linear-gradient(#3a2a20, #2f2119); box-shadow: inset 0 3px 6px rgba(0, 0, 0, .4), 0 4px 0 rgba(0, 0, 0, .25); }
+  :root:not([data-theme="light"]) .floating-bottom-overlay, :root:not([data-theme="light"]) .floating-overlay-panel { background: rgba(43, 31, 24, .96); }
+  :root:not([data-theme="light"]) .overlay-toggle-btn { background: rgba(255, 255, 255, .08); }
+  :root:not([data-theme="light"]) .overlay-toggle-btn:hover { background: rgba(255, 255, 255, .16); }
+  :root:not([data-theme="light"]) .player-card .you { background: var(--bg-2); }
+  :root:not([data-theme="light"]) .board .tile.blank { background: linear-gradient(#e9d9c8, #cdb69c); }
+
+  /* ---- game shell ---- */
+  :root:not([data-theme="light"]) .ll-menu-btn { background: #5c3a29; box-shadow: 0 0 0 2px #b07efc, 0 .2rem .6rem rgba(0, 0, 0, .5); }
+  :root:not([data-theme="light"]) .ll-menu-btn i, :root:not([data-theme="light"]) .ll-menu-btn span { background: #fce8df; }
+  :root:not([data-theme="light"]) .ll-menu { background: #2b1f18; color: #fce8df; box-shadow: 0 .5rem 1.6rem rgba(0, 0, 0, .6); }
+  :root:not([data-theme="light"]) .ll-menu-head code { background: #3a2a20; }
+  :root:not([data-theme="light"]) .ll-settings { background: #382820; }
+  :root:not([data-theme="light"]) .ll-lock { background: #5c3a29; }
+  :root:not([data-theme="light"]) .ll-settings-grid dt, :root:not([data-theme="light"]) .ll-settings-note, :root:not([data-theme="light"]) .bag-total small, :root:not([data-theme="light"]) .bag-hidden, :root:not([data-theme="light"]) .def-attr { color: #d09c85; }
+  :root:not([data-theme="light"]) .ll-players .player-card { background: #382820; border-color: #5c3a29; color: #fce8df; }
+  :root:not([data-theme="light"]) .ll-players .player-card::before {
+    background: #382820 radial-gradient(circle at 50% 50%, hsl(var(--seat-hue, 270) 62% 60%) 0 .5rem, #382820 .55rem);
+    box-shadow: inset 0 0 0 .15rem #5c3a29, 0 0 0 .1rem hsl(var(--seat-hue, 270) 62% 60%);
+  }
+  :root:not([data-theme="light"]) .ll-players .player-card.active { border-color: var(--gold); }
+  :root:not([data-theme="light"]) .ll-players .player-card.waiting { border-left-color: #5c3a29; }
+  :root:not([data-theme="light"]) .ll-players .player-card .name { color: #fce8df; }
+  :root:not([data-theme="light"]) .ll-players .player-card .score { color: #8fb3ff; }
+  :root:not([data-theme="light"]) .ll-bubble { background: #2b1f18; box-shadow: 0 .2rem .6rem rgba(0, 0, 0, .4); }
+  :root:not([data-theme="light"]) .ll-bubble::before { border-right-color: #2b1f18; }
+  :root:not([data-theme="light"]) .ll-preview { color: #fce8df; }
+  :root:not([data-theme="light"]) .ll-act-play { background: #4a3f45; }
+  :root:not([data-theme="light"]) .ll-act-play:not(:disabled) { background: #2f9b4e; }
+  :root:not([data-theme="light"]) .ll-act-play:disabled { background: #4a3f45; color: #e8dcd6; }
+  :root:not([data-theme="light"]) .ll-rack-area .rack { background: rgba(0, 0, 0, .35); box-shadow: inset 0 0 0 .15rem rgba(92, 58, 41, .8); }
+  :root:not([data-theme="light"]) .bag-pop { background: #2b1f18; box-shadow: 0 .3rem 1.2rem rgba(0, 0, 0, .6); }
+  :root:not([data-theme="light"]) .bag-pop::after { border-top-color: #2b1f18; }
+  :root:not([data-theme="light"]) .bag-tab { background: #3a2a20; color: #fce8df; }
+  :root:not([data-theme="light"]) .bag-tab.is-active { background: #7c4fd6; color: #fff; }
+  :root:not([data-theme="light"]) .def-chip { background: #3a2a20; color: #fce8df; }
+  :root:not([data-theme="light"]) .def-chip.is-active { background: var(--color-orange-light); color: #fff; }
+  :root:not([data-theme="light"]) .turn-review { background: #5c3a29; }
+
+  /* ---- board squares (light text on dark premium squares) ---- */
+  :root:not([data-theme="light"]) .ll-stage .board .cell.dl { color: #bfe9ff; }
+  :root:not([data-theme="light"]) .ll-stage .board .cell.tl { color: #ffe9a8; }
+  :root:not([data-theme="light"]) .ll-stage .board .cell.dw { color: #c4f5c1; }
+  :root:not([data-theme="light"]) .ll-stage .board .cell.tw { color: #ffd2bd; }
+  :root:not([data-theme="light"]) .ll-stage .board .cell.center { background: #3a2a20; color: #b07efc; }
+  :root:not([data-theme="light"]) .ll-stage .board .cell.dl, :root:not([data-theme="light"]) .ll-stage .board .cell.tl, :root:not([data-theme="light"]) .ll-stage .board .cell.dw, :root:not([data-theme="light"]) .ll-stage .board .cell.tw { text-shadow: none; }
+
+  /* ---- victory screen ---- */
+  :root:not([data-theme="light"]) .victory { color: #fce8df; }
+  :root:not([data-theme="light"]) .vic-board { background: rgba(18, 12, 9, .7); }
+  :root:not([data-theme="light"]) .vic-leaders, :root:not([data-theme="light"]) .vic-right { background: #2b1f18; }
+  :root:not([data-theme="light"]) .vic-stat-pts b { color: #fce8df; }
+  :root:not([data-theme="light"]) .vic-you { background: #4a2f22; }
+  :root:not([data-theme="light"]) .vic-next, :root:not([data-theme="light"]) .vic-reopen { background: #5c3a29; }
+  :root:not([data-theme="light"]) .vic-reopen { box-shadow: 0 0 0 2px #b07efc; }
+
+}
