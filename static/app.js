@@ -512,7 +512,7 @@
     }
     function stopConfetti() { if (confetti) cancelAnimationFrame(confetti.raf); confetti = null; }
     function renderVictory() {
-      let root = $('victory');
+      const root = $('victory');
       const reopen = $('victory-reopen');
       if (!S || S.status !== 'finished') {
         if (root) root.remove();
@@ -531,7 +531,8 @@
       if (root && !root.hidden && root.dataset.sig === vsig) return;   // unchanged: keep the confetti running
       // rank: tied scores share a rank and the next score gets the next number (1, 2, 2, 3 ...)
       const sorted = [...S.players].sort((a, b) => b.score - a.score || a.seat - b.seat);
-      let rank = 0, prev = null;
+      let rank = 0;
+      let prev = null;
       const rows = sorted.map((p) => { if (p.score !== prev) { rank += 1; prev = p.score; } return { p, rank }; });
       const winners = rows.filter((r) => r.rank === 1).map((r) => r.p);
       const me = rows.find((r) => r.p.seat === S.you) || rows[0];
