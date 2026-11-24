@@ -291,8 +291,6 @@ class Room:
             raise GameError("Unknown timer setting.")
         if auto_expand is not None and not isinstance(auto_expand, bool):
             raise GameError("Auto-expand must be on or off.")
-        if auto_check is not None and not isinstance(auto_check, bool):
-            raise GameError("Auto-check must be on or off.")
         check_expand_margin(expand_margin)
         check_players(mode, max_players)
         if mode != "wild":  # Wild rooms hold up to 16; the bag is topped up at start if it is too small
