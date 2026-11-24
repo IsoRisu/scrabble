@@ -224,10 +224,6 @@
     let pausedLeft = null;   // ms left on a paused (Wild) timer, else null
     let lastBeep = 0;
     const modeLabel = (mode) => (MODE_INFO[mode] ? MODE_INFO[mode].label : mode);
-    const lengthText = (length) => {
-      const tiles = config && config.lengths ? config.lengths[length] : null;
-      return `${LENGTH_LABEL[length] || length}${tiles ? ` (${tiles} tiles)` : ''}`;
-    };
 
     // ---------- derived state ----------
     const isPlaying = () => !!S && S.status === 'playing';
