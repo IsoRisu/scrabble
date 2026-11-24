@@ -34,6 +34,13 @@ body[data-page="game"] {
 .ll-stage .board-scroll { display: flex; align-items: center; justify-content: center; }
 .ll-stage .board {
   width: min(92vw, calc((100vh - 16rem) * var(--cols) / var(--rows))); max-width: none; min-width: 0;
+  touch-action: pan-x pan-y;
+}
+.ll-rack-area .rack .tile {
+  touch-action: none;
+}
+.ll-pill, .ll-pass, .ll-menu-btn, .ll-act, .ll-nav-btn, .bag-tab, .def-chip, .vic-next, .vic-reopen, .vic-close, .vic-next-mobile {
+  touch-action: manipulation;
 }
 
 /* ---- top bar ---- */

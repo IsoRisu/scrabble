@@ -229,7 +229,7 @@ body {
   min-width: min(100%, 520px); margin: 0 auto;
   background: var(--bg-2); border-radius: var(--radius);
   box-shadow: 0 6px 0 rgba(185, 120, 99, .25);
-  touch-action: manipulation;
+  touch-action: pan-x pan-y;
 }
 .cell {
   position: relative; display: flex; align-items: center; justify-content: center;
@@ -431,6 +431,8 @@ body {
   background: var(--bg-2);
 }
 .board-scroll.zoomed .board { touch-action: pan-x pan-y; }
+.rack .tile, .tile.pending { touch-action: none; }
+.btn, button, input[type="text"], select { touch-action: manipulation; }
 .board-scroll.zoomed .board { width: calc(var(--zoom-cell) * var(--cols) + 3px * (var(--cols) - 1) + 12px); max-width: none; min-width: 0; margin: 0 auto; will-change: width; }
 
 /* Pure CSS Viewport Grid for Board & Control Areas */
