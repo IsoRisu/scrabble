@@ -277,7 +277,10 @@ body .ll-bubble.bottom-sheet-status { display: block; position: relative; left: 
   82%  { opacity: 1; transform: translate(-50%, 0) scale(1); }
   100% { opacity: 0; transform: translate(-50%, 0) scale(.96); }
 }
-@media (prefers-reduced-motion: reduce) { .play-banner { animation-name: play-banner-fade; } @keyframes play-banner-fade { 0%, 100% { opacity: 0; } 15%, 85% { opacity: 1; } } }
+@media (prefers-reduced-motion: reduce) {
+  .play-banner { animation: none !important; opacity: 1; }
+  .ll-pill, .ll-pass, .toast, .victory, .vic-board, .vic-leaders, .vic-right { transition: none !important; }
+}
 
 /* ---- post-game victory screen ---- */
 .victory { position: fixed; inset: 0; z-index: 70; display: grid; grid-template-columns: 34% 28% 1fr; font-family: "Barlow Condensed", system-ui, sans-serif; color: #2b2b2b; }

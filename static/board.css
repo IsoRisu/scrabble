@@ -69,3 +69,7 @@ body[data-page="game"], body[data-page="game"] button { font-family: "Barlow Con
 @media (hover: hover) and (pointer: fine) {
   .cell.can-drop:hover { outline: 3px solid var(--hl); outline-offset: -2px; z-index: 2; }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .board, .board-scroll, .cell, .tile { transition: none !important; scroll-behavior: auto !important; }
+}
