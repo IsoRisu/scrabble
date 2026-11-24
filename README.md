@@ -64,6 +64,7 @@ static/
   style.css         base styles
   shell.css         Letter League shell: top bar, menus, bag popover, banners, victory screen
   board.css         board grid, premium tiles, zoom/pan styling
+  js/               client modules (bag.js, lobby.js, util.js, victory.js, zoom.js)
 templates/          index.html (lobby), game.html (game)
 tests/              unit tests for the rules engine
 data/               word lists (en, fi, sv, fr, es)
