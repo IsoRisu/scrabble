@@ -1744,8 +1744,8 @@
       minimapQueued = true;
       requestAnimationFrame(() => { minimapQueued = false; updateMinimap(); });
     };
-    els.boardScroll.addEventListener('scroll', queueMinimap, { passive: true });
-    window.addEventListener('resize', queueMinimap);
+    els.boardScroll.addEventListener('scroll', queueMinivemap, { passive: true });
+    window.addEventListener('resize', queueMinimap, { passive: true });
     function minimapJump(event) {
       const box = els.boardScroll;
       const rect = els.minimap.getBoundingClientRect();

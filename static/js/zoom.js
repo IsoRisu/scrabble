@@ -90,6 +90,7 @@
     let wheelRaf = 0;
     let lastWheelEvent = null;
     els.boardScroll.addEventListener('wheel', (event) => {
+      // passive: false because preventDefault is called to handle board zoom
       event.preventDefault();
       lastWheelEvent = event;
       if (!wheelRaf) {
