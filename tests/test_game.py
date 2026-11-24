@@ -575,6 +575,10 @@ class RoomFlowTests(unittest.TestCase):
         give(mover, list("CAT"))
         give(opp, list("QZ"))  # 20 points of tiles left
         move(room, mover, "CAT", 12, 10)
+        # LAST_TURN: going out does not end the game; every other player gets one final turn.
+        self.assertEqual(room.status, "playing")
+        self.assertEqual(room.final_round, {opp.seat})
+        room.pass_turn(opp)
         self.assertEqual(room.status, "finished")
         base = (3 + 1 + 1) * 2  # CAT with C on the DW at (12,10)
         self.assertEqual(mover.score, base + 20)
@@ -1274,7 +1278,7 @@ class LanguageTests(unittest.TestCase):
         room.place_tiles(mover, [{"rack_index": 0, "row": 7, "col": 7, "letter": "ä"}])
         self.assertEqual(mover.pending[0]["letter"], "Ä")
         with self.assertRaises(GameError):
-            room.place_tiles(mover, [{"rack_index": 0, "row": 7, "col": 7, "letter": "W"}])  # not a Finnish tile
+            room.place_tiles(mover, [{"rack_index": 0, "row": 7, "col": 7, "letter": "Q"}])  # not a Finnish tile
 
     def test_scoring_uses_the_room_language(self):
         words = Board(classic=True).analyze([Placement(7, 7, "Ö", False), Placement(7, 8, "Ö", False)])
@@ -1617,6 +1621,8 @@ class ResignTests(unittest.TestCase):
         give(players[0], list("CAT"))
         players[1].rack = ["Q"]
         move(room, players[0], "CAT", 12, 10)
+        self.assertEqual(room.status, "playing")  # LAST_TURN: the other active player still moves
+        room.pass_turn(players[1])
         self.assertEqual(room.status, "finished")
         self.assertEqual(room.winner, players[0].seat)
 

@@ -44,7 +44,7 @@
 .ll-stage .board-scroll::-webkit-scrollbar { display: none; }
 .ll-stage .board-scroll .board { margin: auto; }
 .ll-stage .board-scroll.zoomed {
-  overflow: auto; width: 100%; height: 100%; max-height: none; cursor: grab; touch-action: none;
+  overflow: auto; width: 100%; height: 100%; max-height: none; cursor: grab; touch-action: pan-x pan-y; user-select: none; -webkit-user-select: none;
 }
 .ll-stage .board-scroll.zoomed .board { max-width: none; flex: none; }
 .ll-stage .board-scroll.panning { cursor: grabbing; }
@@ -53,3 +53,13 @@ body[data-page="game"], body[data-page="game"] button { font-family: "Barlow Con
 .ll-stage .board .cell.dl, .ll-stage .board .cell.tl, .ll-stage .board .cell.dw, .ll-stage .board .cell.tw { text-shadow: 0 1px 0 rgba(255,255,255,.25); }
 .ll-stage .board .tile { background: linear-gradient(#ff8f65, #ff6f43); box-shadow: 0 .15rem 0 #c9553a; color: #fff; }
 .ll-rack-area .rack .tile { border-radius: .7rem; box-shadow: 0 .2rem 0 #c9553a; }
+
+/* ---- aid balls: touch devices only ---- */
+.cell.can-drop::after { display: none; }
+@media (hover: none) and (pointer: coarse) {
+  .cell.can-drop::after { display: block; }
+}
+/* Mouse users get a hover highlight instead of the markers. */
+@media (hover: hover) and (pointer: fine) {
+  .cell.can-drop:hover { outline: 3px solid var(--hl); outline-offset: -2px; z-index: 2; }
+}

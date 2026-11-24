@@ -81,11 +81,12 @@
       const timer = $('create-timer') ? $('create-timer').value : 'off';
       const language = $('create-language') ? $('create-language').value : 'en';
       const auto_check = $('create-autocheck') ? $('create-autocheck').checked : true;
+      const show_distribution = $('create-showdist') ? $('create-showdist').checked : true;
       try {
         const res = await fetch('/create', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mode, length, timer, language, auto_check }),
+          body: JSON.stringify({ mode, length, timer, language, auto_check, show_distribution }),
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || 'Could not create a game.');
@@ -148,6 +149,9 @@
     let socket = null;
     let config = null;       // static board config from the server (premiums, tile values)
     let S = null;            // latest server view for this player
+    let reviewIdx = null;    // turn history: null = live, else index into S.plays shown on the board
+    let reviewPlays = 0;
+    let bannerPlays = null;  // plays seen so far; null until the first state, so rejoining shows no banner
     let version = 0;         // version of S, used to detect missed diffs
     let session = loadSession(roomCode) || { token: null, name: '' };
     let resyncPending = false;
@@ -170,7 +174,7 @@
 
     const els = {
       board: $('board'), rack: $('rack'), preview: $('preview'), banner: $('turn-banner'),
-      players: $('players'), history: $('history'), bag: $('bag-count'), conn: $('conn'),
+      players: $('players'), history: $('history'), conn: $('conn'),
       toast: $('toast'), share: $('share'), shareUrl: $('share-url'), modalRoot: $('modal-root'),
       submit: $('btn-submit'), recall: $('btn-recall'), swap: $('btn-swap'),
       pass: $('btn-pass'), challenge: $('btn-challenge'),
@@ -232,7 +236,7 @@
     // Off-turn players can stage (prepare) a word; it is private and loads into the real
     // tentative placement when their turn starts. Both modes share the same placing UI.
     const canStage = () => isPlaying() && !myTurn() && S.rack.length > 0 && !(S.players[S.you] && S.players[S.you].resigned);
-    const canPlace = () => canEdit() || canStage();
+    const canPlace = () => (canEdit() || canStage()) && reviewIdx === null;
     const opponent = () => (S ? S.players.find((p) => p.seat !== S.you) || null : null);
     const tileValue = (letter) => {
       const values = config && config.values ? config.values[(S && S.language) || config.default_language] : null;
@@ -462,10 +466,112 @@
       return tile;
     }
 
+    // ---------- post-game victory screen ----------
+    let victoryHidden = false;
+    let confetti = null;
+    function avatar(name, cls = '') {
+      let hue = 0;
+      for (const ch of name) hue = (hue * 31 + ch.charCodeAt(0)) % 360;
+      return h('span', { class: 'vic-avatar ' + cls, style: `background:hsl(${hue} 70% 62%)`, text: (name[0] || '?').toUpperCase() });
+    }
+    function wordTiles(word) {
+      return h('div', { class: 'vic-tiles' }, ...[...word].map((l) => h('span', { class: 'vic-tile' }, makeTile(l, false))));
+    }
+    function startConfetti(canvas) {
+      if (confetti) return;
+      const ctx = canvas.getContext('2d');
+      const colors = ['#ff8f65', '#ffd05f', '#aef6ab', '#abe6ff', '#9b5de5', '#ff6f9c'];
+      const size = () => { canvas.width = canvas.clientWidth; canvas.height = canvas.clientHeight; };
+      size();
+      const bits = Array.from({ length: 140 }, () => ({
+        x: Math.random() * canvas.width, y: Math.random() * -canvas.height, w: 6 + Math.random() * 7, h: 4 + Math.random() * 6,
+        vy: 1.2 + Math.random() * 2.2, vx: -0.8 + Math.random() * 1.6, r: Math.random() * 6, vr: -0.15 + Math.random() * 0.3,
+        c: colors[Math.floor(Math.random() * colors.length)],
+      }));
+      confetti = { canvas, raf: 0 };
+      const tick = () => {
+        if (!canvas.isConnected) { confetti = null; return; }
+        if (canvas.width !== canvas.clientWidth) size();
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        for (const b of bits) {
+          b.x += b.vx; b.y += b.vy; b.r += b.vr;
+          if (b.y > canvas.height) { b.y = -10; b.x = Math.random() * canvas.width; }
+          ctx.save(); ctx.translate(b.x, b.y); ctx.rotate(b.r); ctx.fillStyle = b.c; ctx.fillRect(-b.w / 2, -b.h / 2, b.w, b.h); ctx.restore();
+        }
+        confetti.raf = requestAnimationFrame(tick);
+      };
+      tick();
+    }
+    function stopConfetti() { if (confetti) cancelAnimationFrame(confetti.raf); confetti = null; }
+    function renderVictory() {
+      let root = $('victory');
+      const reopen = $('victory-reopen');
+      if (!S || S.status !== 'finished') {
+        if (root) root.remove();
+        if (reopen) reopen.remove();
+        stopConfetti(); victoryHidden = false;
+        return;
+      }
+      if (victoryHidden) {
+        if (root) root.hidden = true;
+        stopConfetti();
+        if (!reopen) document.body.append(h('button', { id: 'victory-reopen', class: 'vic-reopen', type: 'button', text: 'Results', onclick: () => { victoryHidden = false; renderVictory(); } }));
+        return;
+      }
+      if (reopen) reopen.remove();
+      const vsig = JSON.stringify([S.you, S.winner, (S.plays || []).length, S.players.map((p) => [p.name, p.score])]);
+      if (root && !root.hidden && root.dataset.sig === vsig) return;   // unchanged: keep the confetti running
+      // rank: tied scores share a rank and the next score gets the next number (1, 2, 2, 3 ...)
+      const sorted = [...S.players].sort((a, b) => b.score - a.score || a.seat - b.seat);
+      let rank = 0, prev = null;
+      const rows = sorted.map((p) => { if (p.score !== prev) { rank += 1; prev = p.score; } return { p, rank }; });
+      const winners = rows.filter((r) => r.rank === 1).map((r) => r.p);
+      const me = rows.find((r) => r.p.seat === S.you) || rows[0];
+      const plays = S.plays || [];
+      const top = plays.reduce((best, p) => (!best || p.score > best.score ? p : best), null);
+      let longest = null;
+      for (const p of plays) for (const w of p.words) {
+        if (!longest || w.length > longest.word.length || (w.length === longest.word.length && p.score > longest.play.score)) longest = { word: w, play: p };
+      }
+      const crown = '<svg viewBox="0 0 100 60" class="vic-crown" aria-hidden="true"><path d="M8 52 L2 12 L28 32 L50 4 L72 32 L98 12 L92 52 Z" fill="#ffb02e" stroke="#e8861a" stroke-width="4" stroke-linejoin="round"/><circle cx="2" cy="12" r="5" fill="#ff6f43"/><circle cx="50" cy="4" r="5" fill="#ff6f43"/><circle cx="98" cy="12" r="5" fill="#ff6f43"/></svg>';
+      const crownEl = h('span', { class: 'vic-crown-wrap' });
+      crownEl.innerHTML = crown;
+      const stat = (label, entry, pts, word) => h('div', { class: 'vic-stat' },
+        h('div', { class: 'vic-stat-head' }, avatar(entry.name, 'sm'),
+          h('div', { class: 'vic-stat-who' }, h('b', { text: label }), h('span', { text: entry.name })),
+          h('div', { class: 'vic-stat-pts' }, h('b', { text: String(pts) }), h('span', { text: 'pts' }))),
+        wordTiles(word));
+      const board = h('div', { class: 'vic-col vic-board' },
+        h('button', { class: 'vic-close', type: 'button', 'aria-label': 'Close results', text: '×', onclick: () => { victoryHidden = true; renderVictory(); } }),
+        h('button', { class: 'vic-next', type: 'button', text: 'Start next game', onclick: () => act('new_game', {}) }));
+      const lead = h('div', { class: 'vic-col vic-leaders' }, h('h2', { text: 'Players' }),
+        ...rows.map(({ p, rank: rk }) => h('div', { class: 'vic-row' + (p.seat === S.you ? ' me' : '') },
+          h('span', { class: 'vic-rank', text: String(rk) }), avatar(p.name, 'sm'),
+          h('div', { class: 'vic-who' }, h('b', { text: p.name }), h('span', { text: `${p.score} Points` })))));
+      const right = h('div', { class: 'vic-col vic-right' },
+        h('div', { class: 'vic-winner' },
+          h('div', { class: 'vic-win-avatar' }, crownEl, avatar(winners[0].name, 'lg')),
+          h('div', { class: 'vic-win-text' }, h('h1', { text: winners.length > 1 ? 'Winners' : 'Winner' }),
+            h('b', { text: winners.map((w) => w.name).join(' & ') }), h('span', { text: `${winners[0].score} Points` }))),
+        top ? stat('Top turn', top, top.score, top.words[0]) : '',
+        longest ? stat('Longest word', longest.play, longest.play.score, longest.word) : '',
+        h('div', { class: 'vic-you' }, h('h3', { text: 'Your score' }),
+          h('div', { class: 'vic-row' }, h('span', { class: 'vic-rank', text: String(me.rank) }), avatar(me.p.name, 'sm'),
+            h('div', { class: 'vic-who' }, h('b', { text: me.p.name }), h('span', { text: `${me.p.score} points` })))));
+      const canvas = h('canvas', { class: 'vic-confetti' });
+      const next = h('button', { class: 'vic-next vic-next-mobile', type: 'button', text: 'Start next game', onclick: () => act('new_game', {}) });
+      const fresh = h('div', { id: 'victory', class: 'victory' }, canvas, board, lead, right, next);
+      fresh.dataset.sig = vsig;
+      if (root) root.replaceWith(fresh); else document.body.append(fresh);
+      stopConfetti();
+      startConfetti(canvas);
+    }
+
     // ---------- diff-based rendering optimizations ----------
     let lastRenderStateSig = null;
 
     function render() {
+      renderVictory();
       if (!S || !config) return;
       
       const b = boundsOf();
@@ -493,7 +599,7 @@
       renderControls();
       renderTracker();
       
-      els.bag.textContent = String(S.bag_count);
+      renderBagUi();
       renderSettingsButton();
       renderTimer();
       els.modeLabel.textContent = `${modeLabel(S.mode)} · ${lengthText(S.length)}${timerShort(S.timer)}`;
@@ -505,6 +611,113 @@
       document.title = `${myTurn() ? '▶ ' : ''}Scrabble – ${roomCode}`;
       showGameOver();
       queueMinimap();
+    }
+
+    // ---------- tile bag badge + popover (TILE BAG / DEFINITIONS tabs) ----------
+    function renderBagUi() {
+      const badge = $('bag-badge');
+      if (badge) badge.textContent = String(S.bag_count);
+      renderDefs();
+      const pop = $('bag-pop');
+      if (!pop || pop.hidden) return;
+      const t = S.tiles || {};
+      const body = $('bag-tab-bag');
+      body.replaceChildren();
+      if (S.show_distribution === false || t.hidden) {
+        body.append(h('p', { class: 'bag-hidden', text: 'The tile distribution is hidden in this game.' }));
+      } else {
+        const vals = S.letter_values || {};
+        const letters = Object.keys(vals).filter((l) => l !== '?').sort((a, b) => a.localeCompare(b));
+        if (vals['?'] !== undefined) letters.push('?');
+        const grid = h('div', { class: 'bag-grid' });
+        for (const l of letters) {
+          const n = (t.letters && t.letters[l]) || 0;
+          grid.append(h('div', { class: 'bag-tile' + (n ? '' : ' is-empty'), title: `${n} left` },
+            h('span', { class: 'bag-letter', text: l === '?' ? '' : l }),
+            h('sup', { text: String(vals[l]) }),
+            h('span', { class: 'bag-n', text: String(n) })));
+        }
+        body.append(grid);
+      }
+      body.append(h('div', { class: 'bag-total' },
+        h('span', { text: 'Tiles in bag' }), h('b', { text: String(S.bag_count) }),
+        h('small', { text: ` · ${t.total != null ? t.total : S.bag_count} unseen (bag + opponents’ racks)` })));
+    }
+    // ---------- definitions tab ----------
+    const defCache = {};
+    let defWord = null;
+    async function fetchDefinition(word, lang) {
+      const key = lang + ':' + word;
+      if (defCache[key]) return defCache[key];
+      const lower = word.toLowerCase();
+      let result = [];
+      try {
+        if (lang === 'en') {
+          const r = await fetch('https://api.dictionaryapi.dev/v2/entries/en/' + encodeURIComponent(lower));
+          if (r.ok) {
+            const data = await r.json();
+            for (const e of data) for (const m of e.meanings || []) for (const d of m.definitions || []) result.push(d.definition);
+          }
+        } else {
+          const r = await fetch(`https://${lang}.wiktionary.org/api/rest_v1/page/definition/` + encodeURIComponent(lower));
+          if (r.ok) {
+            const data = await r.json();
+            for (const entries of Object.values(data)) for (const e of entries) for (const d of e.definitions || []) {
+              const text = new DOMParser().parseFromString(d.definition, 'text/html').body.textContent.trim();
+              if (text) result.push(text);
+            }
+          }
+        }
+      } catch (err) { result = null; }
+      if (result) defCache[key] = result.slice(0, 8);
+      return result ? result.slice(0, 8) : null;
+    }
+    function renderDefs() {
+      const tab = document.querySelector('#bag-pop .bag-tab[data-tab="defs"]');
+      const body = $('bag-tab-defs');
+      if (!tab || !body) return;
+      const locked = !!S.definitions_locked;
+      tab.disabled = locked;
+      tab.title = locked ? 'Locked in challenge games until you use a challenge' : '';
+      tab.textContent = locked ? 'Definitions 🔒' : 'Definitions';
+      if (locked && !body.hidden) setBagTab('bag');
+      body.replaceChildren();
+      if (locked) return;
+      const words = S.definition_words || [];
+      if (!words.length) { body.append(h('p', { class: 'bag-hidden', text: 'No words have been played yet.' })); return; }
+      if (!defWord || !words.includes(defWord)) defWord = words[0];
+      const chips = h('div', { class: 'def-chips' });
+      for (const w of words.slice(0, 20)) {
+        chips.append(h('button', { type: 'button', class: 'def-chip' + (w === defWord ? ' is-active' : ''), text: w, onclick: () => { defWord = w; renderDefs(); } }));
+      }
+      const box = h('div', { class: 'def-box' }, h('h3', { class: 'def-title', text: defWord.toLowerCase() }), h('p', { class: 'bag-hidden', text: 'Loading…' }));
+      body.append(chips, box, h('div', { class: 'def-attr', text: 'Powered by ' + (S.language === 'en' ? 'Free Dictionary API' : 'Wiktionary') }));
+      const asked = defWord;
+      fetchDefinition(asked, S.language).then((defs) => {
+        if (asked !== defWord) return;
+        box.querySelector('p').remove();
+        if (!defs || !defs.length) { box.append(h('p', { class: 'bag-hidden', text: defs === null ? 'Could not reach the dictionary.' : 'No definition found.' })); return; }
+        box.append(h('ol', { class: 'def-list' }, ...defs.map((d) => h('li', { text: d }))));
+      });
+    }
+    function setBagTab(name) {
+      for (const tab of document.querySelectorAll('#bag-pop .bag-tab')) tab.classList.toggle('is-active', tab.dataset.tab === name);
+      $('bag-tab-bag').hidden = name !== 'bag';
+      $('bag-tab-defs').hidden = name !== 'defs';
+    }
+    function toggleBagPop(force) {
+      const pop = $('bag-pop');
+      if (!pop) return;
+      pop.hidden = force !== undefined ? !force : !pop.hidden;
+      if (!pop.hidden) { setBagTab('bag'); renderBagUi(); }
+    }
+    if ($('bag-btn')) {
+      $('bag-btn').addEventListener('click', (e) => { e.stopPropagation(); toggleBagPop(); });
+      $('bag-btn').addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleBagPop(); } });
+      for (const tab of document.querySelectorAll('#bag-pop .bag-tab')) {
+        tab.addEventListener('click', () => { if (!tab.disabled) setBagTab(tab.dataset.tab); });
+      }
+      document.addEventListener('click', (e) => { if (!e.target.closest('#bag-pop, #bag-btn')) toggleBagPop(false); });
     }
 
     function renderSettingsButton() {
@@ -580,6 +793,8 @@
         modeSel.value = S.mode;
         lengthSel.value = S.length;
         timerSel.value = S.timer;
+        const distChk = h('input', { type: 'checkbox', checked: S.show_distribution !== false });
+        const distField = h('label', { class: 'field-row' }, distChk, h('span', { text: ' Show tile distribution in the tile bag' }));
         const autoCheckField = h('label', { class: 'field-row' }, autoCheckChk, h('span', { text: ' Automatic word check (off = players can challenge)' }));
         const autoCheckRow = h('div', { class: 'field' }, autoCheckField);
         // Switching mode moves the checkbox to that mode's default (Wild on, Classic off) unless it was changed by hand.
@@ -603,6 +818,7 @@
           } else if (change.mode && S.auto_check !== undefined && checkTouched) {
             change.auto_check = autoCheckChk.checked;
           }
+          if (distChk.checked !== (S.show_distribution !== false)) change.show_distribution = distChk.checked;
           api.close();
           if (Object.keys(change).length) act('update_settings', change, () => toast('Game settings updated.'));
         };
@@ -610,7 +826,7 @@
           h('h2', { text: 'Game Settings' }),
           h('p', { text: 'Anyone in the room can change these until the first turn is played.' }),
           field('Scoring', modeSel), help,
-          autoCheckRow,
+          autoCheckRow, h('div', { class: 'field' }, distField),
           field('Length', lengthSel),
           field('Timer', timerSel),
           ...(languages.length > 1 ? [field('Language', languageSel)] : []),
@@ -746,12 +962,62 @@
       if (bub && S.status !== 'waiting') bub.textContent = myTurn() ? "It's your turn!" : text;
     }
 
+    // ---------- turn history arrows: step the board back through the plays ----------
+    const reviewing = () => reviewIdx !== null;
+    function reviewCells() {   // squares to hide: tiles from plays after the one being viewed
+      const hidden = new Set();
+      if (!reviewing()) return hidden;
+      for (const p of S.plays.slice(reviewIdx + 1)) for (const [r, c] of p.cells) hidden.add(`${r},${c}`);
+      return hidden;
+    }
+    function stepReview(dir) {
+      const n = (S.plays || []).length;
+      if (!n) return;
+      if (reviewIdx === null) { if (dir < 0) reviewIdx = n - 1; else return; }
+      else {
+        reviewIdx += dir;
+        if (reviewIdx >= n) reviewIdx = null;          // forward from the latest turn = back to live
+        else if (reviewIdx < 0) reviewIdx = 0;
+      }
+      local.selected = null; local.selectedBoard = null;
+      render();
+    }
+    function showPlayBanner(play) {
+      const old = document.querySelector('.play-banner');
+      if (old) old.remove();
+      const el = h('div', { class: 'play-banner', role: 'status' },
+        h('div', { class: 'play-banner-word', text: play.words.join(' · ') }),
+        h('div', { class: 'play-banner-score', text: `+${play.score} point${play.score === 1 ? '' : 's'}` }));
+      el.addEventListener('animationend', () => el.remove());
+      document.body.append(el);
+    }
+    function renderReview() {
+      const n = (S.plays || []).length;
+      if (bannerPlays !== null && n > bannerPlays && !document.hidden) showPlayBanner(S.plays[n - 1]);
+      bannerPlays = n;
+      if (n !== reviewPlays) { reviewPlays = n; reviewIdx = null; }   // a new play (or take-back) returns to live
+      const box = $('turn-review');
+      const prev = $('turn-prev'), next = $('turn-next');
+      if (prev) prev.disabled = !n || reviewIdx === 0;
+      if (next) next.disabled = !reviewing();
+      if (!box) return;
+      box.hidden = !reviewing();
+      if (!reviewing()) return;
+      const p = S.plays[reviewIdx];
+      box.replaceChildren(h('b', { text: p.words.join(', ') }), h('span', { text: ` +${p.score} points · ${p.name} (play ${reviewIdx + 1} of ${n})` }));
+    }
+    if ($('turn-prev')) $('turn-prev').addEventListener('click', () => stepReview(-1));
+    if ($('turn-next')) $('turn-next').addEventListener('click', () => stepReview(1));
+
     function renderBoard() {
-      const lastCells = new Set((S.last_move ? S.last_move.cells : []).map(([r, c]) => `${r},${c}`));
+      renderReview();
+      const hiddenCells = reviewCells();
+      const reviewLast = reviewing() ? new Set(S.plays[reviewIdx].cells.map(([r, c]) => `${r},${c}`)) : null;
+      const lastCells = reviewLast || new Set((S.last_move ? S.last_move.cells : []).map(([r, c]) => `${r},${c}`));
       const mine = new Map();   // my tentative tiles (my turn) or my staged tiles (off turn)
       // Unplayed tiles are private: the opponent's tentative tiles are never drawn.
       const staging = !canEdit() && canStage();
-      if (canEdit() || staging) {
+      if ((canEdit() || staging) && !reviewing()) {
         for (const p of local.pending) {
           const isBlank = S.rack[p.rack_index] === '?';
           mine.set(`${p.row},${p.col}`, { letter: p.letter, blank: isBlank, boost: letterMult(p.row, p.col) });
@@ -765,7 +1031,7 @@
         for (let c = builtBounds.left; c <= builtBounds.right; c += 1) {
           const key = `${r},${c}`;
           const cell = cells.get(key);
-          const placed = S.board[key];
+          const placed = hiddenCells.has(key) ? undefined : S.board[key];
           let sig;
           let kind = null;
           let info = null;
@@ -1188,7 +1454,9 @@
 
     function onState(msg) {
       config = msg.config;
+      const hadLast = S && S.final_round != null;
       S = msg.state;
+      if (!hadLast && S.final_round != null && S.status === 'playing') toast('Last turn triggered! Every other player gets one final turn.');
       version = msg.version;
       resyncPending = false;
       local.inflight = 0;
@@ -1772,13 +2040,24 @@
       const dx = event.clientX - pan.x;
       const dy = event.clientY - pan.y;
       if (!pan.moved && Math.hypot(dx, dy) < 5) return;
+      if (!pan.moved) {
+        // Past the 5px threshold this is a pan, not a click. Capture is taken only now:
+        // capturing on pointerdown would retarget the click away from the square.
+        try { els.boardScroll.setPointerCapture(pan.id); } catch (_) { /* ignore */ }
+      }
       pan.moved = true;
       els.boardScroll.classList.add('panning');
       els.boardScroll.scrollLeft = pan.left - dx;
       els.boardScroll.scrollTop = pan.top - dy;
     });
+    els.boardScroll.addEventListener('click', (event) => {
+      if (performance.now() < suppressClickUntil) { event.stopPropagation(); event.preventDefault(); }
+    }, true);
     const endPan = () => {
-      if (pan && pan.moved) suppressClickUntil = performance.now() + 150;  // a drag is not a tap on a square
+      if (pan && pan.moved) {
+        suppressClickUntil = performance.now() + 250;  // a drag is not a tap on a square
+        try { els.boardScroll.releasePointerCapture(pan.id); } catch (_) { /* ignore */ }
+      }
       pan = null;
       els.boardScroll.classList.remove('panning');
     };
@@ -2035,32 +2314,6 @@
     const zoomPref = store.get(ZOOM_KEY);
     if (zoomPref === '1' || (zoomPref === null && window.innerWidth <= 700)) {
       setZoom(true, { center: false, persist: zoomPref !== null });
-    }
-    // Also ensure pointer capture and robust event handling for board pan/zoom interactions.
-    const boardScrollEl = els.boardScroll;
-    if (boardScrollEl) {
-      boardScrollEl.addEventListener('pointerdown', (e) => {
-        if (e.pointerType !== 'mouse' && e.pointerType !== 'touch') return;
-        if (boardScrollEl.classList.contains('zoomed') && !e.target.closest('.tile.pending')) {
-          try {
-            boardScrollEl.setPointerCapture(e.pointerId);
-          } catch (_) { /* ignore if unsupported */ }
-        }
-      });
-      boardScrollEl.addEventListener('pointerup', (e) => {
-        try {
-          if (boardScrollEl.hasPointerCapture(e.pointerId)) {
-            boardScrollEl.releasePointerCapture(e.pointerId);
-          }
-        } catch (_) { /* ignore */ }
-      });
-      boardScrollEl.addEventListener('pointercancel', (e) => {
-        try {
-          if (boardScrollEl.hasPointerCapture(e.pointerId)) {
-            boardScrollEl.releasePointerCapture(e.pointerId);
-          }
-        } catch (_) { /* ignore */ }
-      });
     }
     els.modeLabel.textContent = `${modeLabel(document.body.dataset.mode)} · ${LENGTH_LABEL[document.body.dataset.length] || ''}${timerShort(document.body.dataset.timer)}`;
     if (session.token) {

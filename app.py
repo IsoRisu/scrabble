@@ -103,6 +103,10 @@ def create_room():
         if not isinstance(payload["auto_check"], bool):
             return jsonify(error="auto_check must be true or false."), 400
         options["auto_check"] = payload["auto_check"]
+    if payload.get("show_distribution") is not None:
+        if not isinstance(payload["show_distribution"], bool):
+            return jsonify(error="show_distribution must be true or false."), 400
+        options["show_distribution"] = payload["show_distribution"]
     if payload.get("expand_margin") is not None:
         try:
             check_expand_margin(payload["expand_margin"])
@@ -329,12 +333,13 @@ def on_update_settings(room, player, data):
         max_players=data.get("max_players"),
         language=data.get("language"),
         auto_check=data.get("auto_check"),
+        show_distribution=data.get("show_distribution"),
     )
     return {
         "mode": room.mode, "length": room.length, "timer": room.timer,
         "auto_expand": room.auto_expand, "expand_margin": room.expand_margin,
         "max_players": room.max_players, "language": room.language,
-        "auto_check": room.auto_check,
+        "auto_check": room.auto_check, "show_distribution": room.show_distribution,
     }
 
 
@@ -342,6 +347,12 @@ def on_update_settings(room, player, data):
 def on_restart_game(room, player, data):
     """Clear the board, reset scores and the turn timer, and deal new racks from a refilled bag."""
     room.restart(player)
+
+
+@game_action("new_game")
+def on_new_game(room, player, data):
+    """Reset a finished room back to the lobby (board, scores, racks and bag cleared)."""
+    room.reset_to_lobby(player)
 
 
 @game_action("start_game")

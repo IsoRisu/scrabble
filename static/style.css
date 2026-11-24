@@ -701,16 +701,6 @@ body[data-page="game"] {
   display: none;
 }
 
-.bag-float {
-  text-align: center;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--ink);
-  background: rgba(255, 255, 255, 0.6);
-  padding: 4px 8px;
-  border-radius: 8px;
-}
-
 /* Floating Bottom Overlay (Rack & Controls) */
 .floating-bottom-overlay {
   position: fixed;
@@ -804,7 +794,6 @@ body.game-active .bottom-sheet-status {
 }
 
 .floating-overlay-panel.collapsed .players,
-.floating-overlay-panel.collapsed .bag-float,
 .floating-overlay-panel.collapsed .timer-actions {
   display: none !important;
 }

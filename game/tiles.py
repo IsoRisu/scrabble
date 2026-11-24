@@ -21,7 +21,8 @@ TILE_DISTRIBUTIONS = {
     "fi": {
         "A": 10, "B": 1, "C": 1, "D": 1, "E": 8, "F": 1, "G": 1, "H": 2, "I": 10,
         "J": 2, "K": 5, "L": 5, "M": 3, "N": 9, "O": 5, "P": 2, "R": 2, "S": 7,
-        "T": 9, "U": 4, "V": 2, "Y": 2, "Ä": 5, "Ö": 1,
+        "T": 9, "U": 4, "V": 2, "W": 1, "Y": 2, "Ä": 5, "Ö": 1,
+        BLANK: 2,  # 101 tiles in total (Finnish Scrabble, newer sets with the W)
         BLANK: 2,
     },
     "fr": {
@@ -55,7 +56,7 @@ TILE_VALUES = {
     "fi": {
         "A": 1, "B": 8, "C": 10, "D": 7, "E": 1, "F": 8, "G": 8, "H": 4, "I": 1,
         "J": 4, "K": 2, "L": 2, "M": 3, "N": 1, "O": 2, "P": 4, "R": 4, "S": 1,
-        "T": 1, "U": 3, "V": 4, "Y": 4, "Ä": 2, "Ö": 7,
+        "T": 1, "U": 3, "V": 4, "W": 8, "Y": 4, "Ä": 2, "Ö": 7,
         BLANK: 0,
     },
     "fr": {
@@ -112,11 +113,20 @@ def new_bag(lang="en", rng=None, size=None):
     dist = TILE_DISTRIBUTIONS[lang]
     full = [tile for tile, count in dist.items() for _ in range(count)]
     size = len(full) if size is None else size
+    total = len(full)
     bag = []
-    while len(bag) < size:
-        part = list(full)
-        rng.shuffle(part)
-        bag.extend(part)
-    bag = bag[:size]
+    # Whole sets first, then a proportionally scaled (largest-remainder) partial set, so every
+    # length keeps the language's real letter mix (e.g. the Finnish 101-tile distribution).
+    while size - len(bag) >= total:
+        bag.extend(full)
+    rest = size - len(bag)
+    if rest:
+        exact = {t: c * rest / total for t, c in dist.items()}
+        counts = {t: int(v) for t, v in exact.items()}
+        short = rest - sum(counts.values())
+        for t in sorted(exact, key=lambda t: (exact[t] - counts[t], dist[t]), reverse=True)[:short]:
+            counts[t] += 1
+        for t, c in counts.items():
+            bag.extend([t] * c)
     rng.shuffle(bag)
     return bag

@@ -39,7 +39,8 @@
         </div>
         <div class="ll-turn-row">
           <button id="btn-pass" class="ll-pass" type="button" disabled title="Pass turn">Pass turn</button>
-          <span class="ll-turn-nav"><span aria-hidden="true">&#9198;</span><b id="turn-number">Turn 1</b><span aria-hidden="true">&#9197;</span></span>
+          <span class="ll-turn-nav"><button id="turn-prev" class="ll-nav-btn" type="button" aria-label="Previous turn" title="Previous turn">&#9198;</button><b id="turn-number">Turn 1</b><button id="turn-next" class="ll-nav-btn" type="button" aria-label="Next turn" title="Next turn">&#9197;</button></span>
+          <div id="turn-review" class="turn-review" hidden></div>
         </div>
       </div>
       <div id="turn-banner" class="turn-banner ll-turn" role="status" aria-live="polite">Connecting&hellip;</div>
@@ -99,7 +100,6 @@
       <div class="ll-players-body">
         <div id="players" class="players"></div>
         <div class="ll-players-foot">
-          <span class="bag-float">Bag: <b id="bag-count">&ndash;</b></span>
           <button id="btn-challenge" class="ll-pill ll-pill-danger" type="button" hidden>Challenge</button>
         </div>
       </div>
@@ -108,7 +108,17 @@
     <!-- Bottom bar: mascot + speech bubble, tile rack with actions -->
     <footer class="ll-bottom ll-bottom-bar" role="region" aria-label="Game controls and tile rack">
       <div class="ll-mascot-wrap">
-        <div class="ll-mascot" aria-hidden="true"><i></i><i></i></div>
+        <div class="ll-bag-wrap">
+          <div id="bag-pop" class="bag-pop" hidden>
+            <div class="bag-tabs" role="tablist">
+              <button class="bag-tab is-active" data-tab="bag" type="button" role="tab">Tile bag</button>
+              <button class="bag-tab" data-tab="defs" type="button" role="tab">Definitions</button>
+            </div>
+            <div id="bag-tab-bag" class="bag-body"></div>
+            <div id="bag-tab-defs" class="bag-body" hidden></div>
+          </div>
+          <div id="bag-btn" class="ll-mascot" role="button" tabindex="0" aria-label="Tile bag"><i></i><i></i><span id="bag-badge" class="bag-badge">&ndash;</span></div>
+        </div>
         <div id="bottom-sheet-status-text" class="ll-bubble bottom-sheet-status">Your rack appears when the game starts</div>
       </div>
       <div class="ll-rack-area">
