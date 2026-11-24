@@ -145,6 +145,18 @@
   function initGame() {
     const roomCode = document.body.dataset.room;
     const ACK_TIMEOUT = 8000;
+    const BEEP_COOLDOWN_MS = 3000; // Minimum interval between timer overrun alert beeps
+    const TIMER_INTERVAL_MS = 250; // Interval for updating turn timer displays
+    const TOUCH_SLOP = 12; // Pixel movement threshold for touch drag detection
+    const MOUSE_SLOP = 6; // Pixel movement threshold for mouse drag detection
+    const TOUCH_LIFT = 56; // Vertical offset for held tiles during touch drag
+    const CLICK_SUPPRESS_MS = 120; // Time window to ignore synthetic clicks after a drag/pan
+    const PAN_CLICK_SUPPRESS_MS = 250; // Time window to suppress clicks after panning the board
+    const ZBASE = 44; // Base cell size in pixels for 1x zoom
+    const ZMIN = 0.25; // Minimum board zoom scale limit
+    const ZMAX = 8; // Maximum board zoom scale limit
+    const MIN_CELL = ZBASE * ZMIN;
+    const MAX_CELL = ZBASE * ZMAX;
 
     let socket = null;
     let config = null;       // static board config from the server (premiums, tile values)
@@ -893,7 +905,7 @@
         // Wild timers only remind: nothing happens automatically.  The host may skip the player,
         // and pausing the timer silences the reminder.
         els.skipTime.hidden = S.host !== S.you;
-        if (myTurn() && Date.now() - lastBeep > 3000) { lastBeep = Date.now(); beep(); }
+        if (myTurn() && Date.now() - lastBeep > BEEP_COOLDOWN_MS) { lastBeep = Date.now(); beep(); }
       } else {
         box.textContent = `⏱ ${fmtClock(left)}`;
         if (myTurn()) box.classList.add('mine');
@@ -918,7 +930,7 @@
         osc.stop(audioCtx.currentTime + 0.25);
       } catch (_) { /* sound is optional */ }
     }
-    setInterval(renderTimer, 250);
+    setInterval(renderTimer, TIMER_INTERVAL_MS);
 
     function renderBanner() {
       let text;
@@ -1609,9 +1621,6 @@
     // Touch drags: ignore small finger wobble (so taps stay taps) and hold the tile above the
     // fingertip, so the finger never hides the square being aimed at. The drop lands where the
     // tile is shown, not under the finger.
-    const TOUCH_SLOP = 12;
-    const MOUSE_SLOP = 6;
-    const TOUCH_LIFT = 56;
     const aimY = (y) => (press && press.touch ? y - TOUCH_LIFT : y);
 
     function targetAt(x, y) {
@@ -1781,7 +1790,7 @@
       const p = endPress();
       // Swallow only the synthetic click that follows a tile press; a window any longer eats a
       // quick "tap tile, tap square" on a phone.
-      suppressClickUntil = performance.now() + 120;
+      suppressClickUntil = performance.now() + CLICK_SUPPRESS_MS;
       if (!canPlace()) return;
       if (!p.dragging) { handleTap(p.source, p.touch); return; }
       if (!dropIsValid(p.source, target)) return;
@@ -1883,12 +1892,6 @@
         centerBoardOn(cells.get(target ? `${target.row},${target.col}` : `${config.center[0]},${config.center[1]}`));
       }
     }
-    // Zoom factor 1x = 44px squares. Range 0.2x - 8x, eased towards a target on every frame.
-    const ZBASE = 44;
-    const ZMIN = 0.25;
-    const ZMAX = 8;
-    const MIN_CELL = ZBASE * ZMIN;
-    const MAX_CELL = ZBASE * ZMAX;
     const clampCell = (px) => Math.max(MIN_CELL, Math.min(MAX_CELL, px));
     const currentCell = () => parseFloat(getComputedStyle(els.boardScroll).getPropertyValue('--zoom-cell')) || ZBASE;
     const isZoomed = () => els.boardScroll.classList.contains('zoomed');
@@ -2051,7 +2054,7 @@
     }, true);
     const endPan = () => {
       if (pan && pan.moved) {
-        suppressClickUntil = performance.now() + 250;  // a drag is not a tap on a square
+        suppressClickUntil = performance.now() + PAN_CLICK_SUPPRESS_MS;  // a drag is not a tap on a square
         try { els.boardScroll.releasePointerCapture(pan.id); } catch (_) { /* ignore */ }
       }
       pan = null;
