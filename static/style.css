@@ -92,7 +92,7 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 .btn:hover:not(:disabled) { background: var(--bg-2); }
 .btn:active:not(:disabled) { transform: translateY(1px); }
 .btn:disabled { opacity: .45; cursor: not-allowed; }
-.btn:focus-visible, input:focus-visible, select:focus-visible, .tile:focus-visible {
+.btn:focus-visible, input:focus-visible, select:focus-visible, .tile:focus-visible, a:focus-visible {
   outline: 3px solid var(--hl);
   outline-offset: 2px;
 }

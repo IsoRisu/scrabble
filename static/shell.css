@@ -66,6 +66,10 @@ body[data-page="game"] {
   border: 0; border-radius: 99px; padding: .25rem .9rem; cursor: pointer; color: #fff; background: var(--ll-purple-light);
 }
 .ll-pill:hover { filter: brightness(1.08); }
+.ll-pill:focus-visible, .ll-pass:focus-visible, .ll-menu-btn:focus-visible, .ll-act:focus-visible, .ll-nav-btn:focus-visible, .bag-tab:focus-visible, .def-chip:focus-visible, .vic-next:focus-visible, .vic-reopen:focus-visible, .vic-close:focus-visible {
+  outline: 3px solid var(--hl);
+  outline-offset: 2px;
+}
 .ll-pill-danger { background: #d8402b; }
 .ll-turn-row {
   display: flex; align-items: center; justify-content: space-between; gap: 1rem;
