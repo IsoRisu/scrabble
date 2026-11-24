@@ -28,61 +28,57 @@
       <h2>New game</h2>
       <form id="create-form">
         <div class="field">
-          <label for="create-mode"><span>Scoring mode</span>
-            <select id="create-mode">
-              <option value="wild" selected>Wild (automatic check, grows board)</option>
-              <option value="classic">Classic (traditional Scrabble rules)</option>
-            </select>
-          </label>
+          <label for="create-mode">Scoring mode</label>
+          <select id="create-mode" name="create-mode">
+            <option value="wild" selected>Wild (automatic check, grows board)</option>
+            <option value="classic">Classic (traditional Scrabble rules)</option>
+          </select>
         </div>
         <div class="field">
-          <label for="create-length"><span>Game length</span>
-            <select id="create-length">
-              <option value="short">Short (50 tiles)</option>
-              <option value="medium" selected>Medium (100 tiles)</option>
-              <option value="full">Full (150 tiles)</option>
-            </select>
-          </label>
+          <label for="create-length">Game length</label>
+          <select id="create-length" name="create-length">
+            <option value="short">Short (50 tiles)</option>
+            <option value="medium" selected>Medium (100 tiles)</option>
+            <option value="full">Full (150 tiles)</option>
+          </select>
         </div>
         <div class="field">
-          <label for="create-timer"><span>Turn timer</span>
-            <select id="create-timer">
-              <option value="off" selected>No timer</option>
-              <option value="30s">30 seconds</option>
-              <option value="60s">60 seconds</option>
-              <option value="90s">90 seconds</option>
-              <option value="2m">2 minutes</option>
-              <option value="3m">3 minutes</option>
-              <option value="5m">5 minutes</option>
-            </select>
-          </label>
+          <label for="create-timer">Turn timer</label>
+          <select id="create-timer" name="create-timer">
+            <option value="off" selected>No timer</option>
+            <option value="30s">30 seconds</option>
+            <option value="60s">60 seconds</option>
+            <option value="90s">90 seconds</option>
+            <option value="2m">2 minutes</option>
+            <option value="3m">3 minutes</option>
+            <option value="5m">5 minutes</option>
+          </select>
         </div>
         <div class="field">
-          <label for="create-language"><span>Language</span>
-            <select id="create-language">
-              <option value="en" selected>English</option>
-              <option value="fi">Suomi (Finnish)</option>
-              <option value="sv">Svenska (Swedish)</option>
-              <option value="fr">Français (French)</option>
-              <option value="es">Español (Spanish)</option>
-            </select>
-          </label>
+          <label for="create-language">Language</label>
+          <select id="create-language" name="create-language">
+            <option value="en" selected>English</option>
+            <option value="fi">Suomi (Finnish)</option>
+            <option value="sv">Svenska (Swedish)</option>
+            <option value="fr">Français (French)</option>
+            <option value="es">Español (Spanish)</option>
+          </select>
         </div>
         <div class="field field-check">
-          <label for="create-autocheck" class="check-row">
+          <div class="check-row">
             <input id="create-autocheck" type="checkbox" checked>
-            <span><b>Dictionary check (challenge feature)</b>
+            <label for="create-autocheck"><b>Dictionary check (challenge feature)</b>
               <small>On: words are validated automatically against the dictionary. Off: automatic validation is disabled and any tile placement is accepted (useful for Finnish, which has no complete word list).</small>
-            </span>
-          </label>
+            </label>
+          </div>
         </div>
         <div class="field field-check">
-          <label for="create-showdist" class="check-row">
+          <div class="check-row">
             <input id="create-showdist" type="checkbox" checked>
-            <span><b>Show tile distribution</b>
+            <label for="create-showdist"><b>Show tile distribution</b>
               <small>On: the tile bag lists how many of each letter are left. Off: players only see the total number of tiles remaining.</small>
-            </span>
-          </label>
+            </label>
+          </div>
         </div>
         <button id="create-btn" class="btn btn-primary btn-wide" type="submit">Create game</button>
       </form>
@@ -93,9 +89,10 @@
     <section class="card">
       <h2>Join a game</h2>
       <form id="join-form" class="row">
+        <label for="join-code" class="sr-only" style="display:none">Room code</label>
         <input id="join-code" type="text" inputmode="text" autocomplete="off" autocapitalize="characters"
-               spellcheck="false" maxlength="8" placeholder="8-character room code" aria-label="Room code">
-        <button class="btn btn-primary" type="submit">Join</button>
+               spellcheck="false" maxlength="8" placeholder="8-character room code">
+        <button id="join-btn" class="btn btn-primary" type="submit">Join</button>
       </form>
       <p id="join-error" class="form-error" role="alert" hidden></p>
     </section>
