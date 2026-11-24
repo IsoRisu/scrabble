@@ -25,6 +25,12 @@ class AppSmokeTests(unittest.TestCase):
         set_words(["CAT", "CATS"])
         self.client = app_module.app.test_client()
 
+    def test_security_headers(self):
+        response = self.client.get("/")
+        self.assertEqual(response.headers.get("X-Content-Type-Options"), "nosniff")
+        self.assertEqual(response.headers.get("Referrer-Policy"), "strict-origin-when-cross-origin")
+        self.assertEqual(response.headers.get("X-Frame-Options"), "DENY")
+
     def test_healthz(self):
         self.assertEqual(self.client.get("/healthz").status_code, 200)
 

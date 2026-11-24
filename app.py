@@ -43,6 +43,14 @@ app = Flask(__name__)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 
+@app.after_request
+def add_security_headers(response):
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["X-Frame-Options"] = "DENY"
+    return response
+
+
 def _cors_origins():
     """CORS_ALLOWED_ORIGINS: unset = same origin only, '*' = anyone, or a comma list."""
     raw = os.environ.get("CORS_ALLOWED_ORIGINS", "").strip()
