@@ -52,7 +52,7 @@
     </button>
 
     <!-- Slide-down menu / extras (share link, tracker, move history) -->
-    <div id="unified-drawer-secondary-section" class="unified-drawer-secondary-section ll-menu" hidden>
+    <nav id="unified-drawer-secondary-section" class="unified-drawer-secondary-section ll-menu" hidden aria-label="Menu and history">
       <div class="ll-menu-head">
         <span>Room <code id="room-code">{{ code }}</code> &middot; <span id="mode-label"></span></span>
         <span id="conn" class="conn conn-wait" title="Connection status">conn&hellip;</span>
@@ -90,7 +90,7 @@
         <h3>Moves</h3>
         <ol id="history" class="history"></ol>
       </div>
-    </div>
+    </nav>
 
     <!-- Players panel, bottom right -->
     <aside id="players-overlay-panel" class="ll-players">
