@@ -1,0 +1,8 @@
+{
+  "name": "Scrabble",
+  "short_name": "Scrabble",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffe1c0",
+  "theme_color": "#ffe1c0"
+}
