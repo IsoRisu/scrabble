@@ -87,13 +87,23 @@
 
     const zoomNow = () => (zTarget !== null ? zTarget : (isZoomed() ? currentCell() : fitCell())) / ZBASE;
 
+    let wheelRaf = 0;
+    let lastWheelEvent = null;
     els.boardScroll.addEventListener('wheel', (event) => {
       event.preventDefault();
-      let dy = event.deltaY;
-      if (event.deltaMode === 1) dy *= 16;
-      else if (event.deltaMode === 2) dy *= window.innerHeight;
-      const box = els.boardScroll.getBoundingClientRect();
-      setCellSize(zoomNow() * ZBASE * Math.exp(-dy * 0.0016), event.clientX - box.left, event.clientY - box.top);
+      lastWheelEvent = event;
+      if (!wheelRaf) {
+        wheelRaf = requestAnimationFrame(() => {
+          wheelRaf = 0;
+          const e = lastWheelEvent;
+          if (!e) return;
+          let dy = e.deltaY;
+          if (e.deltaMode === 1) dy *= 16;
+          else if (e.deltaMode === 2) dy *= window.innerHeight;
+          const box = els.boardScroll.getBoundingClientRect();
+          setCellSize(zoomNow() * ZBASE * Math.exp(-dy * 0.0016), e.clientX - box.left, e.clientY - box.top);
+        });
+      }
     }, { passive: false });
 
     let zPop = null;
@@ -177,18 +187,28 @@
       pan = { x: event.clientX, y: event.clientY, left: box.scrollLeft, top: box.scrollTop, moved: false, id: event.pointerId };
     });
 
+    let moveRaf = 0;
+    let lastMoveEvent = null;
     document.addEventListener('pointermove', (event) => {
       if (!pan || event.pointerId !== pan.id) return;
-      const dx = event.clientX - pan.x;
-      const dy = event.clientY - pan.y;
-      if (!pan.moved && Math.hypot(dx, dy) < 5) return;
-      if (!pan.moved) {
-        try { els.boardScroll.setPointerCapture(pan.id); } catch (_) { /* ignore */ }
+      lastMoveEvent = event;
+      if (!moveRaf) {
+        moveRaf = requestAnimationFrame(() => {
+          moveRaf = 0;
+          const e = lastMoveEvent;
+          if (!pan || !e || e.pointerId !== pan.id) return;
+          const dx = e.clientX - pan.x;
+          const dy = e.clientY - pan.y;
+          if (!pan.moved && Math.hypot(dx, dy) < 5) return;
+          if (!pan.moved) {
+            try { els.boardScroll.setPointerCapture(pan.id); } catch (_) { /* ignore */ }
+          }
+          pan.moved = true;
+          els.boardScroll.classList.add('panning');
+          els.boardScroll.scrollLeft = pan.left - dx;
+          els.boardScroll.scrollTop = pan.top - dy;
+        });
       }
-      pan.moved = true;
-      els.boardScroll.classList.add('panning');
-      els.boardScroll.scrollLeft = pan.left - dx;
-      els.boardScroll.scrollTop = pan.top - dy;
     });
 
     els.boardScroll.addEventListener('click', (event) => {
