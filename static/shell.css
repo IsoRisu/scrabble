@@ -53,7 +53,7 @@ body[data-page="game"] {
   background: #8a5a3c; border-radius: .2rem; transform: translate(-50%, -50%) rotate(-40deg);
 }
 .ll-timer-card .timer, .ll-timer-num {
-  background: none !important; padding: 0; margin: 0; border-radius: 0; animation: none;
+  background: none; padding: 0; margin: 0; border-radius: 0; animation: none;
   font-size: 3.6rem; font-weight: 800; line-height: 1; color: #fff; min-width: 3.6rem; text-align: center;
   font-variant-numeric: tabular-nums; letter-spacing: 0; box-shadow: none; white-space: nowrap;
 }
@@ -102,7 +102,7 @@ body[data-page="game"] {
   overflow-y: auto; background: #fff3df; color: #4a2416; border-radius: 1rem; padding: 1rem;
   box-shadow: 0 .5rem 1.6rem rgba(60, 30, 90, .35); font-size: 1rem; display: flex; flex-direction: column; gap: .8rem;
 }
-.ll-menu[hidden] { display: none !important; }
+body .ll-menu[hidden] { display: none; }
 .ll-menu-head { display: flex; justify-content: space-between; align-items: center; font-weight: 800; }
 .ll-menu-head code { background: #ffe0bd; padding: .1rem .4rem; border-radius: .4rem; }
 .ll-menu .conn { font-size: .8rem; }
@@ -174,7 +174,7 @@ body[data-page="game"] {
   border-left: 0; border-width: .5rem .7rem .5rem 0;
 }
 /* the old status styles hid/moved this element; neutralise them */
-body .ll-bubble.bottom-sheet-status { display: block !important; position: relative; left: auto; right: auto; bottom: auto; transform: none; width: auto; text-align: left; }
+body .ll-bubble.bottom-sheet-status { display: block; position: relative; left: auto; right: auto; bottom: auto; transform: none; width: auto; text-align: left; }
 
 .ll-rack-area { pointer-events: auto; display: flex; flex-direction: column; align-items: stretch; width: min(32rem, 90vw); }
 .ll-preview { margin: 0 0 .3rem; min-height: 1.3rem; font-size: .95rem; color: #5a3320; text-align: center; }

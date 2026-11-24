@@ -35,7 +35,7 @@
 .ll-stage .board-scroll.zoomed .board {
   width: calc(var(--zoom-cell) * var(--cols) + var(--b-gap) * (var(--cols) - 1));
 }
-.minimap { display: none !important; }
+.ll-stage .minimap { display: none; }
 
 /* ---- Run 3: zoom, pan, polish ---- */
 .ll-stage .board-scroll {
@@ -49,7 +49,7 @@
 .ll-stage .board-scroll.zoomed .board { max-width: none; flex: none; }
 .ll-stage .board-scroll.panning { cursor: grabbing; }
 .ll-stage .board-scroll.is-active { }
-html, body[data-page="game"] { overflow: hidden !important; height: 100vh; position: fixed; width: 100%; }
+html, body[data-page="game"] { overflow: hidden; height: 100vh; position: fixed; width: 100%; }
 body[data-page="game"], body[data-page="game"] button { font-family: "Barlow Condensed", "Nunito", ui-rounded, system-ui, sans-serif; }
 .ll-stage .board .cell.dl, .ll-stage .board .cell.tl, .ll-stage .board .cell.dw, .ll-stage .board .cell.tw { text-shadow: 0 1px 0 rgba(255,255,255,.25); }
 .ll-stage .board .tile { background: linear-gradient(#ff8f65, #ff6f43); box-shadow: 0 .15rem 0 #c9553a; color: #fff; }
