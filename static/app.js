@@ -787,7 +787,8 @@
             }
             cell.append(tile);
           } else if (cell.dataset.label) {
-            cell.append(document.createTextNode(cell.dataset.label));
+            const labelSpan = h('span', { class: 'cell-label', text: cell.dataset.label });
+            cell.append(labelSpan);
           }
         }
       }
@@ -1057,8 +1058,9 @@
       const parts = [];
       pv.words.forEach((w, i) => {
         if (i) parts.push(' · ');
-        const mark = w.valid === true ? '✓ ' : (w.valid === false ? '✗ ' : '');
-        parts.push(h('span', { class: w.valid === false ? 'pv-bad' : (w.valid === true ? 'pv-good' : ''), text: `${mark}${w.word} ${w.score}` }));
+        const mark = w.valid === true ? '✓ [Valid] ' : (w.valid === false ? '✗ [Invalid] ' : '• [Checking] ');
+        const icon = w.valid === true ? '✅ ' : (w.valid === false ? '⚠️ ' : 'ℹ️ ');
+        parts.push(h('span', { class: w.valid === false ? 'pv-bad' : (w.valid === true ? 'pv-good' : ''), text: `${icon}${mark}${w.word} ${w.score}` }));
       });
       if (pv.bingo) parts.push(h('span', { class: 'pv-total', text: ` BINGO +${pv.bingo_bonus !== undefined ? pv.bingo_bonus : config.bingo_bonus}` }));
       if (pv.total !== null && pv.total !== undefined) parts.push(h('span', { class: 'pv-total', text: ` = ${pv.total}` }));

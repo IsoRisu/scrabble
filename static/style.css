@@ -100,7 +100,6 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 .btn-primary:hover:not(:disabled) { background: #36363c; }
 .btn-danger { background: #b52b16; border-color: #72190c; color: #fff; }
 .btn-danger:hover:not(:disabled) { background: #b8341f; }
->
 .btn-link { background: transparent; border-color: transparent; color: inherit; text-decoration: underline; padding: 6px 8px; }
 .btn-wide { width: 100%; }
 
@@ -320,10 +319,12 @@ body {
 
 .preview { min-height: 26px; margin: 10px 2px 2px; color: var(--ink); font-size: 15px; font-weight: 700; text-align: center; }
 .preview .pv-total { font-weight: 800; color: var(--accent-dark); }
-.preview .pv-bad { color: var(--danger); font-weight: 800; }
+.preview .pv-bad { color: var(--danger); font-weight: 800; display: inline-flex; align-items: center; gap: 3px; }
+.preview .pv-bad::before { content: "⚠️"; font-size: 0.9em; }
 .preview .pv-muted { color: var(--muted); }
 .preview .pv-note { color: var(--accent-dark); font-weight: 800; font-size: 13px; margin-bottom: 2px; }
-.preview .pv-good { color: #1d7a3a; font-weight: 800; }
+.preview .pv-good { color: #1d7a3a; font-weight: 800; display: inline-flex; align-items: center; gap: 3px; }
+.preview .pv-good::before { content: "✅"; font-size: 0.9em; }
 
 .controls { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 12px; }
 .controls .btn-primary { min-width: 140px; }
@@ -847,7 +848,6 @@ button, .btn, .icon-btn, select, input[type="text"], .tile, .cell.can-drop {
 .modal p, .hint, .form-error, .modal-info li, .bottom-sheet-status, .tagline, .field span, .bag, .history-wrap h3, .vic-who span {
   color: #623624;
 }
->
 
 /* Base styles for the new collapsible drawer and contextual action bar */
 /* ==========================================================================
