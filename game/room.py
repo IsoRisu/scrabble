@@ -283,8 +283,6 @@ class Room:
                  language=DEFAULT_LANGUAGE, auto_check=None, show_distribution=True):
         if mode not in MODES:
             raise GameError("Unknown game type.")
-        if auto_check is not None and not isinstance(auto_check, bool):
-            raise GameError("Auto-check must be on or off.")
         if length not in LENGTHS:
             raise GameError("Unknown game length.")
         if timer not in TIMERS:
