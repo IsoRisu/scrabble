@@ -262,6 +262,7 @@
     if (zoomPref === '1' || (zoomPref === null && window.innerWidth <= 700)) {
       setZoom(true, { center: false, persist: zoomPref !== null });
     }
+    return { centerBoardOn, setZoom };
   }
 
   window.App.zoom = { initZoom };

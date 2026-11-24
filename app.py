@@ -25,7 +25,7 @@ except ImportError:  # pragma: no cover - depends on the local environment
 import logging
 from functools import wraps
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, url_for
 from flask_socketio import SocketIO, join_room
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -42,6 +42,19 @@ app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 3600
 # Railway / Render terminate TLS in front of us; trust one proxy hop so that
 # request.host_url (used for the shareable link) has the right scheme and host.
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
+
+@app.context_processor
+def versioned_static_urls():
+    """Append the file's mtime to /static URLs so a redeploy is never masked by the 1h browser cache."""
+    def versioned_url_for(endpoint, **values):
+        if endpoint == "static" and values.get("filename"):
+            path = os.path.join(app.static_folder, values["filename"])
+            if os.path.isfile(path):
+                values["v"] = int(os.stat(path).st_mtime)
+        return url_for(endpoint, **values)
+
+    return {"url_for": versioned_url_for}
 
 
 @app.after_request

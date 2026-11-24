@@ -28,10 +28,10 @@
   font-weight: 800; letter-spacing: .01em;
   font-size: max(8px, calc(100cqw / var(--cols) * .4));
 }
-.ll-stage .board .cell.dl { background: var(--b-2l); color: #0a3d59; }
-.ll-stage .board .cell.tl { background: var(--b-3l); color: #573200; }
-.ll-stage .board .cell.dw { background: var(--b-2w); color: #104210; }
-.ll-stage .board .cell.tw { background: var(--b-3w); color: #5e1c0c; }
+.ll-stage .board .cell.dl { background: var(--b-2l); color: var(--b-2l-ink); }
+.ll-stage .board .cell.tl { background: var(--b-3l); color: var(--b-3l-ink); }
+.ll-stage .board .cell.dw { background: var(--b-2w); color: var(--b-2w-ink); }
+.ll-stage .board .cell.tw { background: var(--b-3w); color: var(--b-3w-ink); }
 .ll-stage .board .cell.center {
   background: #fff1de; color: #8a4de0; font-size: max(12px, calc(100cqw / var(--cols) * .6));
 }
@@ -68,7 +68,7 @@
 .ll-stage .board-scroll.is-active { }
 html, body[data-page="game"] { overflow: hidden; height: 100vh; position: fixed; width: 100%; }
 body[data-page="game"], body[data-page="game"] button { font-family: "Barlow Condensed", "Nunito", ui-rounded, system-ui, sans-serif; }
-.ll-stage .board .cell.dl, .ll-stage .board .cell.tl, .ll-stage .board .cell.dw, .ll-stage .board .cell.tw { text-shadow: 0 1px 0 rgba(255,255,255,.25); }
+.ll-stage .board .cell.dl, .ll-stage .board .cell.tl, .ll-stage .board .cell.dw, .ll-stage .board .cell.tw { text-shadow: none; }
 .ll-stage .board .tile { background: linear-gradient(#ff8f65, #ff6f43); box-shadow: 0 .15rem 0 #c9553a; color: #fff; }
 .ll-rack-area .rack .tile { border-radius: .7rem; box-shadow: 0 .2rem 0 #c9553a; }
 

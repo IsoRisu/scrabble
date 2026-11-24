@@ -51,7 +51,6 @@
 :root[data-theme="dark"] .floating-bottom-overlay, :root[data-theme="dark"] .floating-overlay-panel { background: rgba(43, 31, 24, .96); }
 :root[data-theme="dark"] .overlay-toggle-btn { background: rgba(255, 255, 255, .08); }
 :root[data-theme="dark"] .overlay-toggle-btn:hover { background: rgba(255, 255, 255, .16); }
-:root[data-theme="dark"] .player-card .you { background: var(--bg-2); }
 :root[data-theme="dark"] .board .tile.blank { background: linear-gradient(#e9d9c8, #cdb69c); }
 
 /* ---- game shell ---- */
@@ -151,7 +150,6 @@
   :root:not([data-theme="light"]) .floating-bottom-overlay, :root:not([data-theme="light"]) .floating-overlay-panel { background: rgba(43, 31, 24, .96); }
   :root:not([data-theme="light"]) .overlay-toggle-btn { background: rgba(255, 255, 255, .08); }
   :root:not([data-theme="light"]) .overlay-toggle-btn:hover { background: rgba(255, 255, 255, .16); }
-  :root:not([data-theme="light"]) .player-card .you { background: var(--bg-2); }
   :root:not([data-theme="light"]) .board .tile.blank { background: linear-gradient(#e9d9c8, #cdb69c); }
 
   /* ---- game shell ---- */

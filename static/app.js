@@ -59,6 +59,7 @@
     const MAX_CELL = ZBASE * ZMAX;
 
     let socket = null;
+    let zoomApi = null;      // { centerBoardOn, setZoom } from js/zoom.js once initZoom has run
     let config = null;       // static board config from the server (premiums, tile values)
     let S = null;            // latest server view for this player
     let reviewIdx = null;    // turn history: null = live, else index into S.plays shown on the board
@@ -414,7 +415,7 @@
       if (boundsChanged(builtBounds, b) || builtMode !== modeSig) {
         const first = !builtBounds;
         buildBoard();
-        if (first && els.boardScroll.classList.contains('zoomed')) centerBoardOn(cells.get(`${centerOf()[0]},${centerOf()[1]}`));
+        if (first && zoomApi && els.boardScroll.classList.contains('zoomed')) zoomApi.centerBoardOn(cells.get(`${centerOf()[0]},${centerOf()[1]}`));
       }
 
       // A picked-up board tile only stays selected while it is still mine to move.
@@ -1332,13 +1333,14 @@
         local.inflight = 0;
         busy = false;
       });
-      socket.on('connect_error', () => {
+      socket.on('connect_error', (err) => {
         setConn('wait', 'reconnecting…');
+        if (err && err.message) console.warn('Socket.IO connect_error:', err.message);
         // Don't sit on "Connecting…" forever: say so once the server has been unreachable a few times.
         connectErrors += 1;
         if (connectErrors === 3 && !S) {
           els.banner.textContent = "Offline – retrying…";
-          toast("Can't reach the game server. Retrying…", true);
+          toast("Can't reach the game server" + (err && err.message ? ' (' + err.message + ')' : '') + '. Retrying…', true);
         }
       });
       socket.on('state', onState);
@@ -1785,7 +1787,7 @@
 
     // Must run after queueMinimap is defined (const -> temporal dead zone).
     if (window.App.zoom && window.App.zoom.initZoom) {
-      window.App.zoom.initZoom(els, config, () => cells, () => local, centerOf, queueMinimap);
+      zoomApi = window.App.zoom.initZoom(els, config, () => cells, () => local, centerOf, queueMinimap);
     }
     function minimapJump(event) {
       const box = els.boardScroll;
@@ -1957,11 +1959,7 @@
     if (window.App.bag) window.App.bag.initBag(() => S);
 
     // ---------- boot ----------
-    // The 25x25 board is small on a phone, so start zoomed there on mobile viewports (<= 700px) unless saved otherwise.
-    const zoomPref = store.get(ZOOM_KEY);
-    if (zoomPref === '1' || (zoomPref === null && window.innerWidth <= 700)) {
-      setZoom(true, { center: false, persist: zoomPref !== null });
-    }
+    // Saved / mobile-default zoom is restored by zoom.js (initZoom), so nothing to do here.
     els.modeLabel.textContent = `${modeLabel(document.body.dataset.mode)} · ${lengthText(document.body.dataset.length) || ''}${timerShort(document.body.dataset.timer)}`;
     if (session.token) {
       startSocket(); // saved session token -> rejoin automatically
