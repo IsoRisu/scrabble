@@ -38,6 +38,7 @@ from game.room import (
 log = logging.getLogger("scrabble")
 
 app = Flask(__name__)
+app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 3600
 # Railway / Render terminate TLS in front of us; trust one proxy hop so that
 # request.host_url (used for the shareable link) has the right scheme and host.
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)

@@ -31,6 +31,9 @@ class AppSmokeTests(unittest.TestCase):
         self.assertEqual(response.headers.get("Referrer-Policy"), "strict-origin-when-cross-origin")
         self.assertEqual(response.headers.get("X-Frame-Options"), "DENY")
 
+    def test_send_file_max_age_default(self):
+        self.assertEqual(app_module.app.config.get("SEND_FILE_MAX_AGE_DEFAULT"), 3600)
+
     def test_healthz(self):
         self.assertEqual(self.client.get("/healthz").status_code, 200)
 
