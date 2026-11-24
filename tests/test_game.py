@@ -586,6 +586,49 @@ class RoomFlowTests(unittest.TestCase):
         self.assertEqual(room.winner, mover.seat)
         self.assertEqual(room.final["out_seat"], mover.seat)
 
+    def test_last_turn_rule_when_last_tile_drawn(self):
+        # (1) When the last tile is drawn, every other active player gets exactly one more turn.
+        room, a, b = make_room("wild")
+        # Empty the bag except for 1 tile, then have current player draw/play so bag becomes empty.
+        room.bag = [room.bag[0]]
+        mover = room.players[room.current]
+        opp = room.players[1 - room.current]
+        give(mover, list("CATQQQQ"))
+        move(room, mover, "CAT", 12, 10)
+        self.assertEqual(len(room.bag), 0)
+        self.assertEqual(room.status, "playing")
+        self.assertEqual(room.final_round, {opp.seat})
+        # The next player's turn is active
+        self.assertEqual(room.current, opp.seat)
+
+    def test_passing_during_last_turn_is_allowed(self):
+        # (2) Passing during the last turn is allowed.
+        room, a, b = make_room("wild")
+        room.bag = []
+        mover = room.players[room.current]
+        opp = room.players[1 - room.current]
+        give(mover, list("CAT"))
+        move(room, mover, "CAT", 12, 10)
+        self.assertEqual(room.status, "playing")
+        self.assertIn(room.current, room.final_round)
+        # Passing on the last turn should be allowed without throwing GameError
+        room.pass_turn(room.players[room.current])
+
+    def test_game_ends_only_after_final_player_turn(self):
+        # (3) The game ends only after the final player's turn.
+        room, a, b = make_room("wild")
+        room.bag = []
+        mover = room.players[room.current]
+        opp = room.players[1 - room.current]
+        give(mover, list("CAT"))
+        move(room, mover, "CAT", 12, 10)
+        self.assertEqual(room.status, "playing")
+        # First active player finishes their last turn (e.g. by passing)
+        active_player = room.players[room.current]
+        room.pass_turn(active_player)
+        # Game should be finished now since all players in final_round have taken their last turn
+        self.assertEqual(room.status, "finished")
+
     def test_bingo_through_the_room(self):
         room, a, b = make_room()
         mover = room.players[room.current]
