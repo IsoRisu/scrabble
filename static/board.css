@@ -23,7 +23,7 @@
 }
 .ll-stage .board .cell {
   border-radius: 0; background: var(--b-cell);
-  font-family: "Barlow Condensed", "Nunito", ui-rounded, "Segoe UI", system-ui, sans-serif;
+  font-family: "Barlow Condensed", "Nunito", ui-rounded, "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
   font-weight: 800; letter-spacing: .01em;
   font-size: max(8px, calc(100cqw / var(--cols) * .4));
 }

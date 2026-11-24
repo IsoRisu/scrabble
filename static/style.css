@@ -92,14 +92,14 @@
 
 html, body { margin: 0; padding: 0; }
 body {
-  font-family: ui-rounded, "SF Pro Rounded", "Nunito", "Varela Round", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family: ui-rounded, "SF Pro Rounded", "Nunito", "Varela Round", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
   background: var(--bg);
   color: var(--ink);
   min-height: 100vh;
   -webkit-tap-highlight-color: transparent;
 }
 
-code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", Courier, monospace; }
 
 /* ---------- buttons & inputs ---------- */
 .btn {

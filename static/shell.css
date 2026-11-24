@@ -23,7 +23,7 @@ html, body[data-page="game"] {
 }
 body[data-page="game"] {
   width: 100vw; min-height: 0; font-size: 1rem; background: var(--ll-bg);
-  font-family: "Barlow Condensed", "Nunito", ui-rounded, "SF Pro Rounded", "Segoe UI", system-ui, sans-serif;
+  font-family: "Barlow Condensed", "Nunito", ui-rounded, "SF Pro Rounded", "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
 .ll-app { position: fixed; inset: 0; overflow: hidden; background: var(--ll-bg); }
