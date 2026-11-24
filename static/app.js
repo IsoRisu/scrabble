@@ -782,13 +782,14 @@
             lengthSel.value = ordered.find((l) => fits(l, players)) || ordered[ordered.length - 1];
           }
         };
-        const syncPlayers = () => {
+        const initAndSyncSettings = () => {
+          languageSel.value = S.language;
+          modeSel.value = S.mode;
+          lengthSel.value = S.length;
+          timerSel.value = S.timer;
+          showHelp();
           syncLengths();
         };
-        languageSel.value = S.language;
-        modeSel.value = S.mode;
-        lengthSel.value = S.length;
-        timerSel.value = S.timer;
         const distChk = h('input', { type: 'checkbox', checked: S.show_distribution !== false });
         const distField = h('label', { class: 'field-row' }, distChk, h('span', { text: ' Show tile distribution in the tile bag' }));
         const autoCheckField = h('label', { class: 'field-row' }, autoCheckChk, h('span', { text: ' Automatic word check (off = players can challenge)' }));
@@ -798,10 +799,9 @@
         autoCheckChk.addEventListener('change', () => { checkTouched = true; });
         modeSel.addEventListener('change', () => {
           if (!checkTouched) autoCheckChk.checked = modeSel.value === 'wild' ? true : false;
-          showHelp(); syncPlayers();
+          showHelp(); syncLengths();
         });
-        showHelp();
-        syncLengths();
+        initAndSyncSettings();
         const field = (label, el) => h('label', { class: 'field' }, h('span', { text: label }), el);
         const save = () => {
           const change = {};
