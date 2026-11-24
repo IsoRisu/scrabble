@@ -14,6 +14,7 @@
   gap: var(--b-gap); padding: 0; margin: 0 auto;
   background: var(--b-line); border-radius: 0; box-shadow: none;
   outline: var(--b-gap) solid var(--b-line);
+  contain: layout paint;
 }
 @media (max-height: 640px) {
   .ll-stage .board { width: min(90vw, calc((100vh - 7rem) * var(--cols) / var(--rows))); }
@@ -51,6 +52,7 @@
 .ll-stage .board-scroll .board { margin: auto; }
 .ll-stage .board-scroll.zoomed {
   overflow: auto; width: 100%; height: 100%; max-height: none; cursor: grab; touch-action: pan-x pan-y; user-select: none; -webkit-user-select: none;
+  will-change: scroll-position;
 }
 .ll-stage .board {
   touch-action: pan-x pan-y;
